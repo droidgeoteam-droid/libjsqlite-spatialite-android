@@ -10,11 +10,26 @@ jobs:
       - name: Pobieranie kodu
         uses: actions/checkout@v4
 
-      - name: Konfiguracja 16KB i nowoczesnych architektur
+      - name: Znajdz ukryty folder z kodem i dodaj konfiguracje 16KB
         run: |
-          echo "APP_LDFLAGS += -Wl,-z,max-page-size=16384" >> jni/Application.mk
-          echo "APP_ABI := arm64-v8a armeabi-v7a x86_64 x86" >> jni/Application.mk
-          echo "APP_PLATFORM := android-21" >> jni/Application.mk
+          # Szukamy głównego pliku Android.mk w projekcie
+          MAIN_ANDROID_MK=$(find . -name "Android.mk" | awk '{ print length($0), $0 }' | sort -n | cut -d ' ' -f2- | head -n 1)
+          
+          # Wyciągamy ścieżkę do folderu jni
+          JNI_DIR=$(dirname "$MAIN_ANDROID_MK")
+          
+          # Wyciągamy ścieżkę do folderu całego projektu (jeden poziom wyżej)
+          PROJECT_DIR=$(dirname "$JNI_DIR")
+          
+          echo "Znaleziono folder JNI w: $JNI_DIR"
+          
+          # Zapisujemy ścieżkę dla następnych kroków
+          echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
+          
+          # Dopisujemy nasze ustawienia 16KB i architektur
+          echo "APP_LDFLAGS += -Wl,-z,max-page-size=16384" >> "$JNI_DIR/Application.mk"
+          echo "APP_ABI := arm64-v8a armeabi-v7a x86_64 x86" >> "$JNI_DIR/Application.mk"
+          echo "APP_PLATFORM := android-21" >> "$JNI_DIR/Application.mk"
 
       - name: Przygotowanie Android NDK
         uses: nttld/setup-ndk@v1
@@ -23,10 +38,10 @@ jobs:
           ndk-version: r27c
 
       - name: Kompilacja biblioteki
-        run: $ANDROID_NDK_HOME/ndk-build
+        run: $ANDROID_NDK_HOME/ndk-build -C ${{ env.PROJECT_DIR }}
 
       - name: Zapisywanie gotowych plików
         uses: actions/upload-artifact@v4
         with:
           name: gotowe-biblioteki-16kb
-          path: libs/
+          path: ${{ env.PROJECT_DIR }}/libs/
