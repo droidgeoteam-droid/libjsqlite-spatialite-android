@@ -1,0 +1,29 @@
+name: Zbuduj Android 16KB
+on: 
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pobieranie kodu
+        uses: actions/checkout@v4
+
+      - name: Dodawanie flagi 16 KB do pliku konfiguracyjnego
+        run: echo "APP_LDFLAGS += -Wl,-z,max-page-size=16384" >> jni/Application.mk
+
+      - name: Przygotowanie Android NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r27c
+
+      - name: Kompilacja biblioteki
+        run: ndk-build
+
+      - name: Zapisywanie gotowych plików
+        uses: actions/upload-artifact@v4
+        with:
+          name: gotowe-biblioteki-16kb
+          path: libs/
