@@ -10,11 +10,16 @@ jobs:
       - name: Pobieranie kodu
         uses: actions/checkout@v4
 
+      - name: Instalacja potrzebnych programow w tle
+        run: sudo apt-get update && sudo apt-get install -y wget curl unzip make
+
       - name: Pobieranie zaleznosci (PROJ, GEOS, SQLite)
         run: make
 
-      - name: Dodawanie flagi 16 KB do pliku konfiguracyjnego
-        run: echo "APP_LDFLAGS += -Wl,-z,max-page-size=16384" >> jni/Application.mk
+      - name: Konfiguracja dla nowoczesnego Androida i 16KB
+        run: |
+          echo "APP_LDFLAGS += -Wl,-z,max-page-size=16384" >> jni/Application.mk
+          echo "APP_ABI := arm64-v8a armeabi-v7a x86_64 x86" >> jni/Application.mk
 
       - name: Przygotowanie Android NDK
         uses: nttld/setup-ndk@v1
@@ -23,7 +28,7 @@ jobs:
           ndk-version: r27c
 
       - name: Kompilacja biblioteki
-        run: $ANDROID_NDK_HOME/ndk-build APP_PLATFORM=android-21
+        run: $ANDROID_NDK_HOME/ndk-build APP_PLATFORM=android-21 APP_ABI="arm64-v8a armeabi-v7a x86_64 x86"
 
       - name: Zapisywanie gotowych plików
         uses: actions/upload-artifact@v4
