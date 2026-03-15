@@ -32,15 +32,17 @@ jobs:
           sed -i '/tiff/d' "$JNI_DIR/Android.mk"
           sed -i '/gif/d' "$JNI_DIR/Android.mk"
           
+          # ----- NOWOŚĆ: Naprawa błędu ilości argumentów dla RasterLite2 -----
+          sed -i 's/,p_rl2_data,0/,0/g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
+          
           # ----- OSTATECZNA BROŃ (WERSJA PRECYZYJNA) -----
-          # Szukamy folderów, ale WYKLUCZAMY linux-kernel (który tworzył nieskończoną pętlę string.h)
+          # Szukamy folderów, ale WYKLUCZAMY linux-kernel
           find $(pwd) -name "*.h" | grep -v "contrib/linux-kernel" | sed 's|/[^/]*$||' | sort -u | while read -r inc_dir; do
               echo "APP_CFLAGS += -I$inc_dir" >> "$JNI_DIR/Application.mk"
               echo "APP_CXXFLAGS += -I$inc_dir" >> "$JNI_DIR/Application.mk"
           done
 
           # ----- WYŁĄCZENIE RESTRYKCJI NOWEGO KOMPILATORA -----
-          # Zmuszamy NDK r27, aby zachowywało się jak stare NDK wobec legacy kodu
           echo "APP_CFLAGS += -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types" >> "$JNI_DIR/Application.mk"
 
       - name: Przygotowanie Android NDK
