@@ -10,7 +10,7 @@ jobs:
       - name: Pobieranie kodu
         uses: actions/checkout@v4
 
-      - name: Znajdz foldery i napraw bledy autorow
+      - name: Znajdz foldery i zastosuj ostateczna naprawe naglowkow
         run: |
           # Szukamy głównego pliku Android.mk w projekcie
           MAIN_ANDROID_MK=$(find . -name "Android.mk" | awk '{ print length($0), $0 }' | sort -n | cut -d ' ' -f2- | head -n 1)
@@ -27,19 +27,18 @@ jobs:
           echo "APP_PLATFORM := android-21" >> "$JNI_DIR/Application.mk"
           echo "APP_ALLOW_MISSING_DEPS := true" >> "$JNI_DIR/Application.mk"
 
-          # Chirurgiczne cięcie brakujących modułów (które psuły poprzednio kompilację)
+          # Chirurgiczne cięcie brakujących modułów
           sed -i '/freetype/d' "$JNI_DIR/Android.mk"
           sed -i '/tiff/d' "$JNI_DIR/Android.mk"
           sed -i '/gif/d' "$JNI_DIR/Android.mk"
           
-          # ----- NOWY KROK NAPRAWCZY -----
-          # Szukamy absolutnej ścieżki do folderu zawierającego plik sqlite3.h
-          SQLITE_DIR=$(dirname "$(find $(pwd) -name 'sqlite3.h' | head -n 1)")
-          echo "Znaleziono baze w folderze: $SQLITE_DIR"
-          
-          # Mówimy kompilatorowi, żeby tam zaglądał (Flaga -I)
-          echo "APP_CFLAGS += -I$SQLITE_DIR" >> "$JNI_DIR/Application.mk"
-          echo "APP_CXXFLAGS += -I$SQLITE_DIR" >> "$JNI_DIR/Application.mk"
+          # ----- OSTATECZNA BROŃ NA BRAKUJĄCE PLIKI -----
+          # Szukamy absolutnie każdego folderu zawierającego plik .h
+          # i mówimy kompilatorowi: "szukaj w nich wszystkich!"
+          find $(pwd) -name "*.h" -exec dirname {} \; | sort -u | while read -r inc_dir; do
+              echo "APP_CFLAGS += -I$inc_dir" >> "$JNI_DIR/Application.mk"
+              echo "APP_CXXFLAGS += -I$inc_dir" >> "$JNI_DIR/Application.mk"
+          done
 
       - name: Przygotowanie Android NDK
         uses: nttld/setup-ndk@v1
