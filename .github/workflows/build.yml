@@ -32,13 +32,16 @@ jobs:
           sed -i '/tiff/d' "$JNI_DIR/Android.mk"
           sed -i '/gif/d' "$JNI_DIR/Android.mk"
           
-          # ----- OSTATECZNA BROŃ NA BRAKUJĄCE PLIKI -----
-          # Szukamy absolutnie każdego folderu zawierającego plik .h
-          # i mówimy kompilatorowi: "szukaj w nich wszystkich!"
-          find $(pwd) -name "*.h" -exec dirname {} \; | sort -u | while read -r inc_dir; do
+          # ----- OSTATECZNA BROŃ (WERSJA PRECYZYJNA) -----
+          # Szukamy folderów, ale WYKLUCZAMY linux-kernel (który tworzył nieskończoną pętlę string.h)
+          find $(pwd) -name "*.h" | grep -v "contrib/linux-kernel" | sed 's|/[^/]*$||' | sort -u | while read -r inc_dir; do
               echo "APP_CFLAGS += -I$inc_dir" >> "$JNI_DIR/Application.mk"
               echo "APP_CXXFLAGS += -I$inc_dir" >> "$JNI_DIR/Application.mk"
           done
+
+          # ----- WYŁĄCZENIE RESTRYKCJI NOWEGO KOMPILATORA -----
+          # Zmuszamy NDK r27, aby zachowywało się jak stare NDK wobec legacy kodu
+          echo "APP_CFLAGS += -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types" >> "$JNI_DIR/Application.mk"
 
       - name: Przygotowanie Android NDK
         uses: nttld/setup-ndk@v1
