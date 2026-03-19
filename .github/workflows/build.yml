@@ -41,7 +41,6 @@ jobs:
           sed -i 's/void \*p_rl2_data = (void \*)rl2_alloc_private();/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           sed -i 's/rl2_init((sqlite3 \*)h->sqlite,p_rl2_data,0);/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           sed -i 's/rl2_init((sqlite3 \*)h->sqlite,0);/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
-          # Wymiana rl2_version na pusty string:
           sed -i 's/(const char \*)rl2_version();/"wyciety_rasterlite";/g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           
           # ----- TWORZYMY BRAKUJĄCY PLIK CONFIG.H DLA SPATIALITE -----
@@ -64,9 +63,19 @@ jobs:
           SPATIALITE_PRIV_INC=$(dirname "$(find $(pwd) -name 'spatialite_private.h' | head -n 1)")
           SPATIALITE_PUB_INC=$(dirname "$(find $(pwd) -name 'spatialite.h' | head -n 1)")
           
-          # Dodajemy absolutne ścieżki + ścieżkę do naszego wygenerowanego pliku config.h!
+          # 4 nowe celowniki na biblioteki wspierające Spatialite:
+          LIBXML_FILE=$(find $(pwd) -name 'parser.h' | grep '/libxml/' | head -n 1)
+          LIBXML_INC=$(dirname $(dirname "$LIBXML_FILE"))
+          GEOS_INC=$(dirname "$(find $(pwd) -name 'geos_c.h' | head -n 1)")
+          PROJ_INC=$(dirname "$(find $(pwd) -name 'proj_api.h' | head -n 1)")
+          ICONV_INC=$(dirname "$(find $(pwd) -name 'iconv.h' | head -n 1)")
+          
+          # Ładujemy to wszystko do kompilatora
           echo "APP_CFLAGS += -I$SQLITE_INC -I$SPATIALITE_PRIV_INC -I$SPATIALITE_PUB_INC -I$SPATIALITE_DIR" >> "$JNI_DIR/Application.mk"
+          echo "APP_CFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$PROJ_INC -I$ICONV_INC" >> "$JNI_DIR/Application.mk"
+          
           echo "APP_CXXFLAGS += -I$SQLITE_INC -I$SPATIALITE_PRIV_INC -I$SPATIALITE_PUB_INC -I$SPATIALITE_DIR" >> "$JNI_DIR/Application.mk"
+          echo "APP_CXXFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$PROJ_INC -I$ICONV_INC" >> "$JNI_DIR/Application.mk"
 
           # ----- WYŁĄCZENIE RESTRYKCJI NOWEGO KOMPILATORA -----
           echo "APP_CFLAGS += -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types" >> "$JNI_DIR/Application.mk"
