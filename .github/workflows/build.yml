@@ -28,11 +28,8 @@ jobs:
           echo "APP_ALLOW_MISSING_DEPS := true" >> "$JNI_DIR/Application.mk"
 
           # -------------------- CHIRURGICZNE CIĘCIE RASTERLITE2 --------------------
-          # 1. Usuwamy RasterLite2 z konfiguracji
           sed -i '/librasterlite2/d' "$JNI_DIR/Android.mk"
           sed -i '/rasterlite2/d' "$JNI_DIR/Android.mk"
-          
-          # 2. Usuwamy powiązane z nim niekompletne biblioteki graficzne
           sed -i '/freetype/d' "$JNI_DIR/Android.mk"
           sed -i '/tiff/d' "$JNI_DIR/Android.mk"
           sed -i '/gif/d' "$JNI_DIR/Android.mk"
@@ -40,20 +37,32 @@ jobs:
           sed -i '/jpeg/d' "$JNI_DIR/Android.mk"
           sed -i '/webp/d' "$JNI_DIR/Android.mk"
 
-          # 3. PRECYZYJNE cięcie w C - usuwamy TYLKO polecenie #include
           sed -i '/#include.*rasterlite2/d' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
-          
-          # Zakomentowanie wywołań inicjujących RasterLite2 (aby nie wywalało błędu linkera)
           sed -i 's/void \*p_rl2_data = (void \*)rl2_alloc_private();/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           sed -i 's/rl2_init((sqlite3 \*)h->sqlite,p_rl2_data,0);/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           sed -i 's/rl2_init((sqlite3 \*)h->sqlite,0);/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
+          
+          # ----- TWORZYMY BRAKUJĄCY PLIK CONFIG.H DLA SPATIALITE -----
+          SPATIALITE_DIR=$(find $(pwd) -name 'libspatialite*' -type d | head -n 1)
+          echo "Tworze config.h w: $SPATIALITE_DIR"
+          
+          cat <<EOF > "$SPATIALITE_DIR/config.h"
+          #ifndef CONFIG_H
+          #define CONFIG_H
+          #define OMIT_FREEXL 1
+          #define OMIT_GEOCALLBACKS 1
+          #define HAVE_FDATASYNC 1
+          #define HAVE_INTTYPES_H 1
+          #define HAVE_STDINT_H 1
+          #define HAVE_UNISTD_H 1
+          #endif
+          EOF
           
           # ----- OSTATECZNA BROŃ (SNAJPER - ABSOLUTNE ŚCIEŻKI) -----
           SQLITE_INC=$(dirname "$(find $(pwd) -name 'sqlite3.h' | head -n 1)")
           SPATIALITE_PRIV_INC=$(dirname "$(find $(pwd) -name 'spatialite_private.h' | head -n 1)")
           SPATIALITE_PUB_INC=$(dirname "$(find $(pwd) -name 'spatialite.h' | head -n 1)")
           
-          # Dodajemy 3 kluczowe, absolutne ścieżki
           echo "APP_CFLAGS += -I$SQLITE_INC -I$SPATIALITE_PRIV_INC -I$SPATIALITE_PUB_INC" >> "$JNI_DIR/Application.mk"
           echo "APP_CXXFLAGS += -I$SQLITE_INC -I$SPATIALITE_PRIV_INC -I$SPATIALITE_PUB_INC" >> "$JNI_DIR/Application.mk"
 
