@@ -27,7 +27,7 @@ jobs:
           echo "APP_PLATFORM := android-21" >> "$JNI_DIR/Application.mk"
           echo "APP_ALLOW_MISSING_DEPS := true" >> "$JNI_DIR/Application.mk"
 
-          # -------------------- CHIRURGICZNE CIĘCIE --------------------
+          # -------------------- CHIRURGICZNE CIĘCIE RASTERLITE2 --------------------
           # 1. Usuwamy RasterLite2 z konfiguracji
           sed -i '/librasterlite2/d' "$JNI_DIR/Android.mk"
           sed -i '/rasterlite2/d' "$JNI_DIR/Android.mk"
@@ -40,8 +40,11 @@ jobs:
           sed -i '/jpeg/d' "$JNI_DIR/Android.mk"
           sed -i '/webp/d' "$JNI_DIR/Android.mk"
 
-          # 3. Wycinamy wywołanie z głównego pliku javasqlite
-          # Ponieważ rl2_alloc_private i rl2_init są częścią RaterLite2, musimy je zakomentować
+          # 3. Wycinamy wszelkie ślady RasterLite2 z głównego kodu C!
+          # To usunie nieszczęsną linijkę 61: #include "rasterlite2/rasterlite2.h"
+          sed -i '/rasterlite2/d' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
+          
+          # Zakomentowanie wywołań inicjujących
           sed -i 's/void \*p_rl2_data = (void \*)rl2_alloc_private();/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           sed -i 's/rl2_init((sqlite3 \*)h->sqlite,p_rl2_data,0);/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           sed -i 's/rl2_init((sqlite3 \*)h->sqlite,0);/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
@@ -51,7 +54,7 @@ jobs:
           SPATIALITE_PRIV_INC=$(dirname "$(find $(pwd) -name 'spatialite_private.h' | head -n 1)")
           SPATIALITE_PUB_INC=$(dirname "$(find $(pwd) -name 'spatialite.h' | head -n 1)")
           
-          # Dodajemy tylko 3 absolutne ścieżki
+          # Dodajemy tylko 3 kluczowe, absolutne ścieżki
           echo "APP_CFLAGS += -I$SQLITE_INC -I$SPATIALITE_PRIV_INC -I$SPATIALITE_PUB_INC" >> "$JNI_DIR/Application.mk"
           echo "APP_CXXFLAGS += -I$SQLITE_INC -I$SPATIALITE_PRIV_INC -I$SPATIALITE_PUB_INC" >> "$JNI_DIR/Application.mk"
 
