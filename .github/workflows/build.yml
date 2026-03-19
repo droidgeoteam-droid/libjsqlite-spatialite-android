@@ -27,24 +27,23 @@ jobs:
           echo "APP_PLATFORM := android-21" >> "$JNI_DIR/Application.mk"
           echo "APP_ALLOW_MISSING_DEPS := true" >> "$JNI_DIR/Application.mk"
 
-          # Chirurgiczne cięcie brakujących modułów
+          # Chirurgiczne cięcie brakujących modułów (to wciąż potrzebne)
           sed -i '/freetype/d' "$JNI_DIR/Android.mk"
           sed -i '/tiff/d' "$JNI_DIR/Android.mk"
           sed -i '/gif/d' "$JNI_DIR/Android.mk"
-          
-          # Naprawa błędu ilości argumentów dla RasterLite2
-          sed -i 's/,p_rl2_data,0/,0/g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           
           # ----- OSTATECZNA BROŃ (SNAJPER - ABSOLUTNE ŚCIEŻKI) -----
           SQLITE_INC=$(dirname "$(find $(pwd) -name 'sqlite3.h' | head -n 1)")
           SPATIALITE_PRIV_INC=$(dirname "$(find $(pwd) -name 'spatialite_private.h' | head -n 1)")
           SPATIALITE_PUB_INC=$(dirname "$(find $(pwd) -name 'spatialite.h' | head -n 1)")
           
-          # Kod żąda "rasterlite2/rasterlite2.h", więc musimy podać folder O JEDEN POZIOM WYŻEJ
-          RL2_FILE=$(find $(pwd) -name 'rasterlite2.h' | head -n 1)
+          # Wymuszamy najnowszą wersję 4.3.0 z repozytorium (z którą kod C jest domyślnie zgodny)
+          RL2_FILE=$(find $(pwd) -name 'rasterlite2.h' | grep "4.3.0" | head -n 1)
+          # Zabezpieczenie na wypadek literówki
+          if [ -z "$RL2_FILE" ]; then RL2_FILE=$(find $(pwd) -name 'rasterlite2.h' | head -n 1); fi
           RL2_INC=$(dirname $(dirname "$RL2_FILE"))
           
-          # Dodajemy te absolutne ścieżki
+          # Dodajemy absolutne ścieżki
           echo "APP_CFLAGS += -I$SQLITE_INC -I$SPATIALITE_PRIV_INC -I$SPATIALITE_PUB_INC -I$RL2_INC" >> "$JNI_DIR/Application.mk"
           echo "APP_CXXFLAGS += -I$SQLITE_INC -I$SPATIALITE_PRIV_INC -I$SPATIALITE_PUB_INC -I$RL2_INC" >> "$JNI_DIR/Application.mk"
 
