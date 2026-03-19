@@ -35,12 +35,15 @@ jobs:
           # Naprawa błędu ilości argumentów dla RasterLite2
           sed -i 's/,p_rl2_data,0/,0/g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           
-          # ----- OSTATECZNA BROŃ (WERSJA BEZPIECZNA) -----
-          # Zmiana z -I na -idirafter zapobiega nadpisywaniu plików systemowych Androida!
-          find $(pwd) -name "*.h" | grep -v "contrib/linux-kernel" | sed 's|/[^/]*$||' | sort -u | while read -r inc_dir; do
-              echo "APP_CFLAGS += -idirafter $inc_dir" >> "$JNI_DIR/Application.mk"
-              echo "APP_CXXFLAGS += -idirafter $inc_dir" >> "$JNI_DIR/Application.mk"
-          done
+          # ----- OSTATECZNA BROŃ (WERSJA SNAJPERSKA) -----
+          # Szukamy tylko 3 krytycznych folderów, których brakowało w głównym pliku
+          SQLITE_INC=$(dirname "$(find . -name 'sqlite3.h' | head -n 1)")
+          SPATIALITE_INC=$(dirname "$(find . -name 'spatialite_private.h' | head -n 1)")
+          RL2_INC=$(dirname "$(find . -name 'rasterlite2.h' | head -n 1)")
+          
+          # Dodajemy tylko te 3 krótkie ścieżki
+          echo "APP_CFLAGS += -idirafter $SQLITE_INC -idirafter $SPATIALITE_INC -idirafter $RL2_INC" >> "$JNI_DIR/Application.mk"
+          echo "APP_CXXFLAGS += -idirafter $SQLITE_INC -idirafter $SPATIALITE_INC -idirafter $RL2_INC" >> "$JNI_DIR/Application.mk"
 
           # ----- WYŁĄCZENIE RESTRYKCJI NOWEGO KOMPILATORA -----
           echo "APP_CFLAGS += -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types" >> "$JNI_DIR/Application.mk"
