@@ -32,14 +32,14 @@ jobs:
           sed -i '/tiff/d' "$JNI_DIR/Android.mk"
           sed -i '/gif/d' "$JNI_DIR/Android.mk"
           
-          # ----- NOWOŚĆ: Naprawa błędu ilości argumentów dla RasterLite2 -----
+          # Naprawa błędu ilości argumentów dla RasterLite2
           sed -i 's/,p_rl2_data,0/,0/g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           
-          # ----- OSTATECZNA BROŃ (WERSJA PRECYZYJNA) -----
-          # Szukamy folderów, ale WYKLUCZAMY linux-kernel
+          # ----- OSTATECZNA BROŃ (WERSJA BEZPIECZNA) -----
+          # Zmiana z -I na -idirafter zapobiega nadpisywaniu plików systemowych Androida!
           find $(pwd) -name "*.h" | grep -v "contrib/linux-kernel" | sed 's|/[^/]*$||' | sort -u | while read -r inc_dir; do
-              echo "APP_CFLAGS += -I$inc_dir" >> "$JNI_DIR/Application.mk"
-              echo "APP_CXXFLAGS += -I$inc_dir" >> "$JNI_DIR/Application.mk"
+              echo "APP_CFLAGS += -idirafter $inc_dir" >> "$JNI_DIR/Application.mk"
+              echo "APP_CXXFLAGS += -idirafter $inc_dir" >> "$JNI_DIR/Application.mk"
           done
 
           # ----- WYŁĄCZENIE RESTRYKCJI NOWEGO KOMPILATORA -----
