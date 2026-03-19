@@ -58,19 +58,25 @@ jobs:
           #endif
           EOF
           
+          # ----- NOWOŚĆ: Generujemy brakujący plik dla libxml2 -----
+          XMLVERSION_TEMPLATE=$(find $(pwd) -name 'xmlversion.h.in' | head -n 1)
+          if [ -n "$XMLVERSION_TEMPLATE" ]; then
+            # Kopiujemy xmlversion.h.in jako xmlversion.h (dokładnie to, czego domaga się system)
+            cp "$XMLVERSION_TEMPLATE" "$(dirname "$XMLVERSION_TEMPLATE")/xmlversion.h"
+            echo "Stworzono brakujący xmlversion.h"
+          fi
+
           # ----- OSTATECZNA BROŃ (SNAJPER - ABSOLUTNE ŚCIEŻKI) -----
           SQLITE_INC=$(dirname "$(find $(pwd) -name 'sqlite3.h' | head -n 1)")
           SPATIALITE_PRIV_INC=$(dirname "$(find $(pwd) -name 'spatialite_private.h' | head -n 1)")
           SPATIALITE_PUB_INC=$(dirname "$(find $(pwd) -name 'spatialite.h' | head -n 1)")
           
-          # 4 nowe celowniki na biblioteki wspierające Spatialite:
           LIBXML_FILE=$(find $(pwd) -name 'parser.h' | grep '/libxml/' | head -n 1)
           LIBXML_INC=$(dirname $(dirname "$LIBXML_FILE"))
           GEOS_INC=$(dirname "$(find $(pwd) -name 'geos_c.h' | head -n 1)")
           PROJ_INC=$(dirname "$(find $(pwd) -name 'proj_api.h' | head -n 1)")
           ICONV_INC=$(dirname "$(find $(pwd) -name 'iconv.h' | head -n 1)")
           
-          # Ładujemy to wszystko do kompilatora
           echo "APP_CFLAGS += -I$SQLITE_INC -I$SPATIALITE_PRIV_INC -I$SPATIALITE_PUB_INC -I$SPATIALITE_DIR" >> "$JNI_DIR/Application.mk"
           echo "APP_CFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$PROJ_INC -I$ICONV_INC" >> "$JNI_DIR/Application.mk"
           
