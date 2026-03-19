@@ -40,11 +40,10 @@ jobs:
           sed -i '/jpeg/d' "$JNI_DIR/Android.mk"
           sed -i '/webp/d' "$JNI_DIR/Android.mk"
 
-          # 3. Wycinamy wszelkie ślady RasterLite2 z głównego kodu C!
-          # To usunie nieszczęsną linijkę 61: #include "rasterlite2/rasterlite2.h"
-          sed -i '/rasterlite2/d' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
+          # 3. PRECYZYJNE cięcie w C - usuwamy TYLKO polecenie #include
+          sed -i '/#include.*rasterlite2/d' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           
-          # Zakomentowanie wywołań inicjujących
+          # Zakomentowanie wywołań inicjujących RasterLite2 (aby nie wywalało błędu linkera)
           sed -i 's/void \*p_rl2_data = (void \*)rl2_alloc_private();/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           sed -i 's/rl2_init((sqlite3 \*)h->sqlite,p_rl2_data,0);/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           sed -i 's/rl2_init((sqlite3 \*)h->sqlite,0);/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
@@ -54,7 +53,7 @@ jobs:
           SPATIALITE_PRIV_INC=$(dirname "$(find $(pwd) -name 'spatialite_private.h' | head -n 1)")
           SPATIALITE_PUB_INC=$(dirname "$(find $(pwd) -name 'spatialite.h' | head -n 1)")
           
-          # Dodajemy tylko 3 kluczowe, absolutne ścieżki
+          # Dodajemy 3 kluczowe, absolutne ścieżki
           echo "APP_CFLAGS += -I$SQLITE_INC -I$SPATIALITE_PRIV_INC -I$SPATIALITE_PUB_INC" >> "$JNI_DIR/Application.mk"
           echo "APP_CXXFLAGS += -I$SQLITE_INC -I$SPATIALITE_PRIV_INC -I$SPATIALITE_PUB_INC" >> "$JNI_DIR/Application.mk"
 
