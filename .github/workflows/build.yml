@@ -43,13 +43,14 @@ jobs:
           sed -i 's/rl2_init((sqlite3 \*)h->sqlite,0);/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           sed -i 's/(const char \*)rl2_version();/"wyciety_rasterlite";/g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           
-          # ----- TWORZYMY BRAKUJĄCY PLIK CONFIG.H DLA SPATIALITE -----
+          # -------------------- OSTATECZNY CONFIG.H DLA SPATIALITE --------------------
+          # Dodaliśmy OMIT_LIBXML2 aby odciąć uszkodzoną bibliotekę
           SPATIALITE_DIR=$(find $(pwd) -name 'libspatialite*' -type d | head -n 1)
-          
           cat <<EOF > "$SPATIALITE_DIR/config.h"
           #ifndef CONFIG_H
           #define CONFIG_H
           #define OMIT_FREEXL 1
+          #define OMIT_LIBXML2 1
           #define OMIT_GEOCALLBACKS 1
           #define HAVE_FDATASYNC 1
           #define HAVE_INTTYPES_H 1
@@ -57,31 +58,25 @@ jobs:
           #define HAVE_UNISTD_H 1
           #endif
           EOF
-          
-          # ----- NOWOŚĆ: Generujemy brakujący plik dla libxml2 -----
-          XMLVERSION_TEMPLATE=$(find $(pwd) -name 'xmlversion.h.in' | head -n 1)
-          if [ -n "$XMLVERSION_TEMPLATE" ]; then
-            # Kopiujemy xmlversion.h.in jako xmlversion.h (dokładnie to, czego domaga się system)
-            cp "$XMLVERSION_TEMPLATE" "$(dirname "$XMLVERSION_TEMPLATE")/xmlversion.h"
-            echo "Stworzono brakujący xmlversion.h"
-          fi
 
+          # Usuwamy stare, zepsute żądanie włączenia LIBXML2 (które autorzy gdzieś zakodowali na sztywno) z pliku Makefile:
+          sed -i 's/-DENABLE_LIBXML2//g' "$JNI_DIR/Android.mk"
+          sed -i '/libxml2/d' "$JNI_DIR/Android.mk"
+          
           # ----- OSTATECZNA BROŃ (SNAJPER - ABSOLUTNE ŚCIEŻKI) -----
           SQLITE_INC=$(dirname "$(find $(pwd) -name 'sqlite3.h' | head -n 1)")
           SPATIALITE_PRIV_INC=$(dirname "$(find $(pwd) -name 'spatialite_private.h' | head -n 1)")
           SPATIALITE_PUB_INC=$(dirname "$(find $(pwd) -name 'spatialite.h' | head -n 1)")
           
-          LIBXML_FILE=$(find $(pwd) -name 'parser.h' | grep '/libxml/' | head -n 1)
-          LIBXML_INC=$(dirname $(dirname "$LIBXML_FILE"))
           GEOS_INC=$(dirname "$(find $(pwd) -name 'geos_c.h' | head -n 1)")
           PROJ_INC=$(dirname "$(find $(pwd) -name 'proj_api.h' | head -n 1)")
           ICONV_INC=$(dirname "$(find $(pwd) -name 'iconv.h' | head -n 1)")
           
           echo "APP_CFLAGS += -I$SQLITE_INC -I$SPATIALITE_PRIV_INC -I$SPATIALITE_PUB_INC -I$SPATIALITE_DIR" >> "$JNI_DIR/Application.mk"
-          echo "APP_CFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$PROJ_INC -I$ICONV_INC" >> "$JNI_DIR/Application.mk"
+          echo "APP_CFLAGS += -I$GEOS_INC -I$PROJ_INC -I$ICONV_INC" >> "$JNI_DIR/Application.mk"
           
           echo "APP_CXXFLAGS += -I$SQLITE_INC -I$SPATIALITE_PRIV_INC -I$SPATIALITE_PUB_INC -I$SPATIALITE_DIR" >> "$JNI_DIR/Application.mk"
-          echo "APP_CXXFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$PROJ_INC -I$ICONV_INC" >> "$JNI_DIR/Application.mk"
+          echo "APP_CXXFLAGS += -I$GEOS_INC -I$PROJ_INC -I$ICONV_INC" >> "$JNI_DIR/Application.mk"
 
           # ----- WYŁĄCZENIE RESTRYKCJI NOWEGO KOMPILATORA -----
           echo "APP_CFLAGS += -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types" >> "$JNI_DIR/Application.mk"
