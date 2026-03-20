@@ -43,9 +43,10 @@ jobs:
           sed -i 's/rl2_init((sqlite3 \*)h->sqlite,0);/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           sed -i 's/(const char \*)rl2_version();/"wyciety_rasterlite";/g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           
-          # NOWOŚĆ: Usuwamy z ustawień NDK "ENABLE_RTTOPO=1", skoro tej biblioteki po prostu nie ma
+          # 1. Usuwamy RTTOPO z konfiguracji Android.mk
           sed -i 's/-DENABLE_RTTOPO=1//g' "$JNI_DIR/Android.mk"
-
+          sed -i 's/-DENABLE_GCP=1//g' "$JNI_DIR/Android.mk"
+          
           # ----- TWORZYMY BRAKUJĄCY PLIK CONFIG.H DLA SPATIALITE -----
           SPATIALITE_DIR=$(find $(pwd) -name 'libspatialite*' -type d | head -n 1)
           cat <<EOF > "$SPATIALITE_DIR/config.h"
@@ -57,8 +58,12 @@ jobs:
           #define HAVE_INTTYPES_H 1
           #define HAVE_STDINT_H 1
           #define HAVE_UNISTD_H 1
+          #define OMIT_RTTOPO 1
           #endif
           EOF
+          
+          # 2. BRUTALNE WYZCINANIE: Komentujemy ręczne wołania nagłówków librttopo.h we wszystkich plikach Spatialite
+          find "$SPATIALITE_DIR" -name "*.c" -o -name "*.h" -exec sed -i 's/#include <librttopo.h>/\/\/#include <librttopo.h>/g' {} +
           
           # ----- NAPRAWA BŁĘDU LIBXML2 (Brakujący plik xmlversion.h) -----
           XMLVERSION_TEMPLATE=$(find $(pwd) -name 'xmlversion.h.in' | head -n 1)
@@ -81,12 +86,10 @@ jobs:
           
           PROJ_INC=$(dirname "$(find $(pwd) -name 'proj_api.h' | head -n 1)")
           
-          # Tworzymy "fałszywy" plik proj.h dla Spatialite, by zachować kompatybilność
           echo "#include \"proj_api.h\"" > "$PROJ_INC/proj.h"
           
           ICONV_INC=$(dirname "$(find $(pwd) -name 'iconv.h' | head -n 1)")
           
-          # Ładujemy wszystkie ścieżki
           echo "APP_CFLAGS += -I$SQLITE_INC -I$SPATIALITE_PRIV_INC -I$SPATIALITE_PUB_INC -I$SPATIALITE_DIR" >> "$JNI_DIR/Application.mk"
           echo "APP_CFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ_INC -I$ICONV_INC" >> "$JNI_DIR/Application.mk"
           
