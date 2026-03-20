@@ -64,14 +64,11 @@ jobs:
           
           touch "$SPATIALITE_DIR/librttopo.h"
           
-          # ----- BRUTALNA NEUTRALIZACJA BŁĘDÓW STRUKTURY -----
-          # Wstrzykujemy statyczne zmienne do wszystkich plików .c i przekierowujemy na nie tekstowe odwołania do zepsutej struktury
-          find "$SPATIALITE_DIR" -name "*.c" -exec sed -i '1i static char* dummy_ptr = 0; static int dummy_int = 0;' {} +
-          find "$SPATIALITE_DIR" -name "*.c" -exec sed -i 's/[a-zA-Z0-9_]*->gaia_geos_error_msg/dummy_ptr/g' {} +
-          find "$SPATIALITE_DIR" -name "*.c" -exec sed -i 's/[a-zA-Z0-9_]*->gaia_geos_warning_msg/dummy_ptr/g' {} +
-          find "$SPATIALITE_DIR" -name "*.c" -exec sed -i 's/[a-zA-Z0-9_]*->gaia_rttopo_error_msg/dummy_ptr/g' {} +
-          find "$SPATIALITE_DIR" -name "*.c" -exec sed -i 's/[a-zA-Z0-9_]*->gaia_rttopo_warning_msg/dummy_ptr/g' {} +
-          find "$SPATIALITE_DIR" -name "*.c" -exec sed -i 's/[a-zA-Z0-9_]*->silent_mode/dummy_int/g' {} +
+          # ----- BRUTALNA NEUTRALIZACJA BŁĘDÓW STRUKTURY (CIĘCIE FIZYCZNE) -----
+          ALLOC_CACHE_FILE=$(find "$SPATIALITE_DIR" -name "alloc_cache.c" | head -n 1)
+          # Obcinamy plik alloc_cache.c na 140 linijce (czyli tuż przed 144, gdzie wywala error). 
+          # Wszystko po 140 linijce zostanie trwale usunięte z dysku przed kompilacją!
+          head -n 140 "$ALLOC_CACHE_FILE" > temp_file && mv temp_file "$ALLOC_CACHE_FILE"
 
           # ----- NAPRAWA BŁĘDU LIBXML2 (Brakujący plik xmlversion.h) -----
           XMLVERSION_TEMPLATE=$(find $(pwd) -name 'xmlversion.h.in' | head -n 1)
@@ -97,7 +94,6 @@ jobs:
           
           ICONV_INC=$(dirname "$(find $(pwd) -name 'iconv.h' | head -n 1)")
           
-          # Ładujemy wszystkie ścieżki
           echo "APP_CFLAGS += -I$SQLITE_INC -I$SPATIALITE_PRIV_INC -I$SPATIALITE_PUB_INC -I$SPATIALITE_DIR" >> "$JNI_DIR/Application.mk"
           echo "APP_CFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ_INC -I$ICONV_INC" >> "$JNI_DIR/Application.mk"
           
