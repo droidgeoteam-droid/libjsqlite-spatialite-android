@@ -62,11 +62,18 @@ jobs:
           #endif
           EOF
           
-          # ----- TWORZYMY FAKE RTTOPO DLA KOMPILATORA -----
-          # Skoro tak bardzo chce ten plik, rzucamy mu pusty nagłówek.
           touch "$SPATIALITE_DIR/librttopo.h"
           
-          # ----- NAPRAWA BŁĘDU LIBXML2 (Brakujący plik xmlversion.h) -----
+          # ----- NEUTRALIZACJA ZEPSUTEGO LOGOWANIA W ALLOC_CACHE.C -----
+          # Te kilka linijek sprawi, ze zepsute funkcje raportujace błedy od razu zwrócą "nic",
+          # ukrywając przed kompilatorem brakujące pola w strukturze.
+          ALLOC_CACHE_FILE=$(find "$SPATIALITE_DIR" -name "alloc_cache.c" | head -n 1)
+          sed -i 's/void update_geos_error_msg (void \*p_cache, const char \*msg)/void update_geos_error_msg(void* p, const char* m) { return; } void dummy_geos_err(void* a, const char* b)/g' "$ALLOC_CACHE_FILE"
+          sed -i 's/void update_geos_warning_msg (void \*p_cache, const char \*msg)/void update_geos_warning_msg(void* p, const char* m) { return; } void dummy_geos_warn(void* a, const char* b)/g' "$ALLOC_CACHE_FILE"
+          sed -i 's/void update_rttopo_error_msg (void \*p_cache, const char \*msg)/void update_rttopo_error_msg(void* p, const char* m) { return; } void dummy_rt_err(void* a, const char* b)/g' "$ALLOC_CACHE_FILE"
+          sed -i 's/void update_rttopo_warning_msg (void \*p_cache, const char \*msg)/void update_rttopo_warning_msg(void* p, const char* m) { return; } void dummy_rt_warn(void* a, const char* b)/g' "$ALLOC_CACHE_FILE"
+          
+          # ----- NAPRAWA BŁĘDU LIBXML2 -----
           XMLVERSION_TEMPLATE=$(find $(pwd) -name 'xmlversion.h.in' | head -n 1)
           if [ -n "$XMLVERSION_TEMPLATE" ]; then
             TARGET_XMLVERSION="$(dirname "$XMLVERSION_TEMPLATE")/xmlversion.h"
@@ -86,12 +93,10 @@ jobs:
           GEOS_MAIN_INC=$(dirname $(dirname $(find $(pwd) -name 'export.h' | grep '/geos/' | head -n 1)))
           
           PROJ_INC=$(dirname "$(find $(pwd) -name 'proj_api.h' | head -n 1)")
-          
           echo "#include \"proj_api.h\"" > "$PROJ_INC/proj.h"
           
           ICONV_INC=$(dirname "$(find $(pwd) -name 'iconv.h' | head -n 1)")
           
-          # Ładujemy wszystkie ścieżki
           echo "APP_CFLAGS += -I$SQLITE_INC -I$SPATIALITE_PRIV_INC -I$SPATIALITE_PUB_INC -I$SPATIALITE_DIR" >> "$JNI_DIR/Application.mk"
           echo "APP_CFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ_INC -I$ICONV_INC" >> "$JNI_DIR/Application.mk"
           
