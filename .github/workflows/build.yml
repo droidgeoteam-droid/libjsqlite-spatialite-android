@@ -64,18 +64,13 @@ jobs:
           
           touch "$SPATIALITE_DIR/librttopo.h"
           
-          # ----- BRUTALNA NEUTRALIZACJA ZEPSUTEGO LOGOWANIA W ALLOC_CACHE.C -----
-          # Te komendy odnajdują sygnaturę funkcji w pliku i natychmiast zamieniają zawartość klamry na pustą
-          ALLOC_CACHE_FILE=$(find "$SPATIALITE_DIR" -name "alloc_cache.c" | head -n 1)
-          sed -i '/void update_geos_error_msg/,/^}/c\void update_geos_error_msg(void *p_cache, const char *msg) {}' "$ALLOC_CACHE_FILE"
-          sed -i '/void update_geos_warning_msg/,/^}/c\void update_geos_warning_msg(void *p_cache, const char *msg) {}' "$ALLOC_CACHE_FILE"
-          sed -i '/void update_rttopo_error_msg/,/^}/c\void update_rttopo_error_msg(void *p_cache, const char *msg) {}' "$ALLOC_CACHE_FILE"
-          sed -i '/void update_rttopo_warning_msg/,/^}/c\void update_rttopo_warning_msg(void *p_cache, const char *msg) {}' "$ALLOC_CACHE_FILE"
-          
-          # I na wypadek, gdyby gdzie indziej też wołali o zmienne z tej nieistniejącej struktury, wyłączymy to w reset_error_msgs:
-          sed -i '/static void reset_error_msgs/,/^}/c\static void reset_error_msgs(struct splite_internal_cache *cache) {}' "$ALLOC_CACHE_FILE"
+          # ----- ŁATAMY ZEPSUTĄ STRUKTURĘ W SPATIALITE_PRIVATE.H -----
+          # Ponieważ ten plik nagłówkowy w tym repozytorium to stara wersja, brakuje mu tych 5 zmiennych.
+          # Wpychamy je na sztywno tuż przed końcem struktury, żeby alloc_cache.c przestał o nie krzyczeć.
+          PRIV_HEADER=$(find "$SPATIALITE_DIR" -name "spatialite_private.h" | head -n 1)
+          sed -i 's/    void \*auth_context;/    void \*auth_context;\n    char \*gaia_geos_error_msg;\n    char \*gaia_geos_warning_msg;\n    char \*gaia_rttopo_error_msg;\n    char \*gaia_rttopo_warning_msg;\n    int silent_mode;/g' "$PRIV_HEADER"
 
-          # ----- NAPRAWA BŁĘDU LIBXML2 (Brakujący plik xmlversion.h) -----
+          # ----- NAPRAWA BŁĘDU LIBXML2 -----
           XMLVERSION_TEMPLATE=$(find $(pwd) -name 'xmlversion.h.in' | head -n 1)
           if [ -n "$XMLVERSION_TEMPLATE" ]; then
             TARGET_XMLVERSION="$(dirname "$XMLVERSION_TEMPLATE")/xmlversion.h"
