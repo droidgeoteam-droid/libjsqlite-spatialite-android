@@ -62,11 +62,7 @@ jobs:
           if [ -n "$XMLVERSION_TEMPLATE" ]; then
             TARGET_XMLVERSION="$(dirname "$XMLVERSION_TEMPLATE")/xmlversion.h"
             cp "$XMLVERSION_TEMPLATE" "$TARGET_XMLVERSION"
-            
-            # Magiczna poprawka: Zamienia wszystkie zmienne typu @WITH_XYZ@ na 0
-            # To uspokaja preprocesor C i wylacza dziwne zaleznosci (np. Threading na starych Androidach).
             sed -i 's/@[A-Z0-9_]*@/0/g' "$TARGET_XMLVERSION"
-            echo "Stworzono i naprawiono xmlversion.h"
           fi
 
           # ----- OSTATECZNA BROŃ (SNAJPER - ABSOLUTNE ŚCIEŻKI) -----
@@ -77,15 +73,19 @@ jobs:
           LIBXML_FILE=$(find $(pwd) -name 'parser.h' | grep '/libxml/' | head -n 1)
           LIBXML_INC=$(dirname $(dirname "$LIBXML_FILE"))
           GEOS_INC=$(dirname "$(find $(pwd) -name 'geos_c.h' | head -n 1)")
+          
+          # NOWOŚĆ: Ścieżka do głównego folderu "include" w GEOS
+          GEOS_MAIN_INC=$(dirname $(dirname $(find $(pwd) -name 'export.h' | grep '/geos/' | head -n 1)))
+          
           PROJ_INC=$(dirname "$(find $(pwd) -name 'proj_api.h' | head -n 1)")
           ICONV_INC=$(dirname "$(find $(pwd) -name 'iconv.h' | head -n 1)")
           
-          # Dodajemy wszystkie sciezki i włączamy z powrotem libxml2
+          # Ładujemy wszystkie ścieżki
           echo "APP_CFLAGS += -I$SQLITE_INC -I$SPATIALITE_PRIV_INC -I$SPATIALITE_PUB_INC -I$SPATIALITE_DIR" >> "$JNI_DIR/Application.mk"
-          echo "APP_CFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$PROJ_INC -I$ICONV_INC" >> "$JNI_DIR/Application.mk"
+          echo "APP_CFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ_INC -I$ICONV_INC" >> "$JNI_DIR/Application.mk"
           
           echo "APP_CXXFLAGS += -I$SQLITE_INC -I$SPATIALITE_PRIV_INC -I$SPATIALITE_PUB_INC -I$SPATIALITE_DIR" >> "$JNI_DIR/Application.mk"
-          echo "APP_CXXFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$PROJ_INC -I$ICONV_INC" >> "$JNI_DIR/Application.mk"
+          echo "APP_CXXFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ_INC -I$ICONV_INC" >> "$JNI_DIR/Application.mk"
 
           # ----- WYŁĄCZENIE RESTRYKCJI NOWEGO KOMPILATORA -----
           echo "APP_CFLAGS += -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types" >> "$JNI_DIR/Application.mk"
