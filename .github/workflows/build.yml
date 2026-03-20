@@ -64,17 +64,14 @@ jobs:
           
           touch "$SPATIALITE_DIR/librttopo.h"
           
-          # ----- BRUTALNA NEUTRALIZACJA ZEPSUTEGO LOGOWANIA W ALLOC_CACHE.C -----
-          # Zamiast się bawić w `sed`, po prostu przekierujemy preprocesorem kod struktury.
-          # Wstawiamy w locie makro do CFLAGS, które "zaczaruje" kompilator, mówiąc mu:
-          # Kiedy w kodzie widzisz użycie "cache->gaia_geos_error_msg", uznaj to za odwołanie
-          # do sztucznej globalnej zmiennej, zamiast narzekać na brakującą część struktury.
-          
-          echo "APP_CFLAGS += -Dgaia_geos_error_msg=magic_dummy_var -Dgaia_geos_warning_msg=magic_dummy_var -Dgaia_rttopo_error_msg=magic_dummy_var -Dgaia_rttopo_warning_msg=magic_dummy_var -Dsilent_mode=magic_dummy_int" >> "$JNI_DIR/Application.mk"
-          
-          # Definiujemy te sztuczne zmienne globalnie na samej górze pliku alloc_cache.c:
-          ALLOC_CACHE_FILE=$(find "$SPATIALITE_DIR" -name "alloc_cache.c" | head -n 1)
-          sed -i '1i char* magic_dummy_var = 0; int magic_dummy_int = 0;' "$ALLOC_CACHE_FILE"
+          # ----- BRUTALNA NEUTRALIZACJA BŁĘDÓW STRUKTURY -----
+          # Wstrzykujemy statyczne zmienne do wszystkich plików .c i przekierowujemy na nie tekstowe odwołania do zepsutej struktury
+          find "$SPATIALITE_DIR" -name "*.c" -exec sed -i '1i static char* dummy_ptr = 0; static int dummy_int = 0;' {} +
+          find "$SPATIALITE_DIR" -name "*.c" -exec sed -i 's/[a-zA-Z0-9_]*->gaia_geos_error_msg/dummy_ptr/g' {} +
+          find "$SPATIALITE_DIR" -name "*.c" -exec sed -i 's/[a-zA-Z0-9_]*->gaia_geos_warning_msg/dummy_ptr/g' {} +
+          find "$SPATIALITE_DIR" -name "*.c" -exec sed -i 's/[a-zA-Z0-9_]*->gaia_rttopo_error_msg/dummy_ptr/g' {} +
+          find "$SPATIALITE_DIR" -name "*.c" -exec sed -i 's/[a-zA-Z0-9_]*->gaia_rttopo_warning_msg/dummy_ptr/g' {} +
+          find "$SPATIALITE_DIR" -name "*.c" -exec sed -i 's/[a-zA-Z0-9_]*->silent_mode/dummy_int/g' {} +
 
           # ----- NAPRAWA BŁĘDU LIBXML2 (Brakujący plik xmlversion.h) -----
           XMLVERSION_TEMPLATE=$(find $(pwd) -name 'xmlversion.h.in' | head -n 1)
