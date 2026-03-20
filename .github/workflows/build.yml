@@ -72,12 +72,15 @@ jobs:
           
           LIBXML_FILE=$(find $(pwd) -name 'parser.h' | grep '/libxml/' | head -n 1)
           LIBXML_INC=$(dirname $(dirname "$LIBXML_FILE"))
-          GEOS_INC=$(dirname "$(find $(pwd) -name 'geos_c.h' | head -n 1)")
           
-          # NOWOŚĆ: Ścieżka do głównego folderu "include" w GEOS
+          GEOS_INC=$(dirname "$(find $(pwd) -name 'geos_c.h' | head -n 1)")
           GEOS_MAIN_INC=$(dirname $(dirname $(find $(pwd) -name 'export.h' | grep '/geos/' | head -n 1)))
           
           PROJ_INC=$(dirname "$(find $(pwd) -name 'proj_api.h' | head -n 1)")
+          
+          # NOWOŚĆ: Tworzymy "fałszywy" plik proj.h dla Spatialite, by zachować kompatybilność starego z nowym
+          echo "#include \"proj_api.h\"" > "$PROJ_INC/proj.h"
+          
           ICONV_INC=$(dirname "$(find $(pwd) -name 'iconv.h' | head -n 1)")
           
           # Ładujemy wszystkie ścieżki
