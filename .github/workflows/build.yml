@@ -27,7 +27,7 @@ jobs:
           echo "APP_PLATFORM := android-21" >> "$JNI_DIR/Application.mk"
           echo "APP_ALLOW_MISSING_DEPS := true" >> "$JNI_DIR/Application.mk"
 
-          # -------------------- CHIRURGICZNE CIĘCIE RASTERLITE2 --------------------
+          # -------------------- CHIRURGICZNE CIĘCIE RASTERLITE2 I INNYCH BRAKÓW --------------------
           sed -i '/librasterlite2/d' "$JNI_DIR/Android.mk"
           sed -i '/rasterlite2/d' "$JNI_DIR/Android.mk"
           sed -i '/freetype/d' "$JNI_DIR/Android.mk"
@@ -43,6 +43,9 @@ jobs:
           sed -i 's/rl2_init((sqlite3 \*)h->sqlite,0);/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           sed -i 's/(const char \*)rl2_version();/"wyciety_rasterlite";/g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           
+          # NOWOŚĆ: Usuwamy z ustawień NDK "ENABLE_RTTOPO=1", skoro tej biblioteki po prostu nie ma
+          sed -i 's/-DENABLE_RTTOPO=1//g' "$JNI_DIR/Android.mk"
+
           # ----- TWORZYMY BRAKUJĄCY PLIK CONFIG.H DLA SPATIALITE -----
           SPATIALITE_DIR=$(find $(pwd) -name 'libspatialite*' -type d | head -n 1)
           cat <<EOF > "$SPATIALITE_DIR/config.h"
@@ -78,7 +81,7 @@ jobs:
           
           PROJ_INC=$(dirname "$(find $(pwd) -name 'proj_api.h' | head -n 1)")
           
-          # NOWOŚĆ: Tworzymy "fałszywy" plik proj.h dla Spatialite, by zachować kompatybilność starego z nowym
+          # Tworzymy "fałszywy" plik proj.h dla Spatialite, by zachować kompatybilność
           echo "#include \"proj_api.h\"" > "$PROJ_INC/proj.h"
           
           ICONV_INC=$(dirname "$(find $(pwd) -name 'iconv.h' | head -n 1)")
