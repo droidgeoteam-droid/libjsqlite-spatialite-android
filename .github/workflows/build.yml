@@ -27,7 +27,6 @@ jobs:
           echo "APP_PLATFORM := android-21" >> "$JNI_DIR/Application.mk"
           echo "APP_ALLOW_MISSING_DEPS := true" >> "$JNI_DIR/Application.mk"
 
-          # Nadanie pełnych uprawnień dla narzędzia SED
           chmod -R 777 .
 
           # -------------------- CHIRURGICZNE CIĘCIE RASTERLITE2 I INNYCH BRAKÓW --------------------
@@ -67,12 +66,26 @@ jobs:
           
           touch "$SPATIALITE_DIR/librttopo.h"
 
-          # ----- WSTRZYKNIĘCIE BRAKUJĄCYCH PÓL DO STRUKTURY -----
-          # Szukamy starego, wadliwego pliku nagłówkowego
-          PRIV_HEADER=$(find "$SPATIALITE_DIR" -name "spatialite_private.h" | head -n 1)
+          # ----- PYTHON: OSTATECZNE FIZYCZNE USUNIĘCIE ZEPSUTEGO KODU Z PLIKU .C -----
+          ALLOC_CACHE_FILE=$(find "$SPATIALITE_DIR" -name "alloc_cache.c" | head -n 1)
+          python3 -c "
+          import re
+          with open('$ALLOC_CACHE_FILE', 'r') as f: content = f.read()
+          # Masywne wyrzucanie zepsutych, nieistniejacych pol w strukturze.
+          # Zamieniamy wszystkie odwolania na absolutnie puste operacje
+          content = re.sub(r'cache->gaia_geos_error_msg', '0', content)
+          content = re.sub(r'cache->gaia_geos_warning_msg', '0', content)
+          content = re.sub(r'cache->gaia_rttopo_error_msg', '0', content)
+          content = re.sub(r'cache->gaia_rttopo_warning_msg', '0', content)
+          content = re.sub(r'cache->silent_mode', '0', content)
           
-          # Magia awk: Znajduje "struct splite_internal_cache {" i tuż pod spodem wciska brakujące pola
-          awk '/struct splite_internal_cache \{/ { print; print "    char* gaia_geos_error_msg;\n    char* gaia_geos_warning_msg;\n    char* gaia_rttopo_error_msg;\n    char* gaia_rttopo_warning_msg;\n    int silent_mode;"; next }1' "$PRIV_HEADER" > temp.h && mv temp.h "$PRIV_HEADER"
+          # Usuwamy tez niebezpieczne operacje zwalniania (free) na tych zepsutych polach
+          content = re.sub(r'free \(0\);', '', content)
+          # Usuwamy przypisania z uzyciem strcpy
+          content = re.sub(r'strcpy \(0, msg\);', '', content)
+          
+          with open('$ALLOC_CACHE_FILE', 'w') as f: f.write(content)
+          "
 
           # ----- NAPRAWA BŁĘDU LIBXML2 (Brakujący plik xmlversion.h) -----
           XMLVERSION_TEMPLATE=$(find $(pwd) -name 'xmlversion.h.in' | head -n 1)
