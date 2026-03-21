@@ -12,14 +12,10 @@ jobs:
 
       - name: Znajdz foldery i zastosuj ostateczna naprawe naglowkow
         run: |
-          # Szukamy głównego pliku Android.mk w projekcie
           MAIN_ANDROID_MK=$(find . -name "Android.mk" | awk '{ print length($0), $0 }' | sort -n | cut -d ' ' -f2- | head -n 1)
           
           JNI_DIR=$(dirname "$MAIN_ANDROID_MK")
           PROJECT_DIR=$(dirname "$JNI_DIR")
-          
-          echo "Znaleziono folder JNI w: $JNI_DIR"
-          echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
           
           # Konfiguracja 16KB i architektur
           echo "APP_LDFLAGS += -Wl,-z,max-page-size=16384" >> "$JNI_DIR/Application.mk"
@@ -27,9 +23,7 @@ jobs:
           echo "APP_PLATFORM := android-21" >> "$JNI_DIR/Application.mk"
           echo "APP_ALLOW_MISSING_DEPS := true" >> "$JNI_DIR/Application.mk"
 
-          chmod -R 777 .
-
-          # -------------------- CHIRURGICZNE CIĘCIE RASTERLITE2 I INNYCH BRAKÓW --------------------
+          # Usuwamy RasterLite2 z Android.mk
           sed -i '/librasterlite2/d' "$JNI_DIR/Android.mk"
           sed -i '/rasterlite2/d' "$JNI_DIR/Android.mk"
           sed -i '/freetype/d' "$JNI_DIR/Android.mk"
@@ -45,7 +39,7 @@ jobs:
           sed -i 's/rl2_init((sqlite3 \*)h->sqlite,0);/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           sed -i 's/(const char \*)rl2_version();/"wyciety_rasterlite";/g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           
-          # Usuwamy RTTOPO z konfiguracji Android.mk
+          # Usuwamy RTTOPO
           sed -i 's/-DENABLE_RTTOPO=1//g' "$JNI_DIR/Android.mk"
           sed -i 's/-DENABLE_GCP=1//g' "$JNI_DIR/Android.mk"
           
@@ -66,28 +60,13 @@ jobs:
           
           touch "$SPATIALITE_DIR/librttopo.h"
 
-          # ----- PYTHON: OSTATECZNE FIZYCZNE USUNIĘCIE ZEPSUTEGO KODU Z PLIKU .C -----
-          ALLOC_CACHE_FILE=$(find "$SPATIALITE_DIR" -name "alloc_cache.c" | head -n 1)
-          python3 -c "
-          import re
-          with open('$ALLOC_CACHE_FILE', 'r') as f: content = f.read()
-          # Masywne wyrzucanie zepsutych, nieistniejacych pol w strukturze.
-          # Zamieniamy wszystkie odwolania na absolutnie puste operacje
-          content = re.sub(r'cache->gaia_geos_error_msg', '0', content)
-          content = re.sub(r'cache->gaia_geos_warning_msg', '0', content)
-          content = re.sub(r'cache->gaia_rttopo_error_msg', '0', content)
-          content = re.sub(r'cache->gaia_rttopo_warning_msg', '0', content)
-          content = re.sub(r'cache->silent_mode', '0', content)
-          
-          # Usuwamy tez niebezpieczne operacje zwalniania (free) na tych zepsutych polach
-          content = re.sub(r'free \(0\);', '', content)
-          # Usuwamy przypisania z uzyciem strcpy
-          content = re.sub(r'strcpy \(0, msg\);', '', content)
-          
-          with open('$ALLOC_CACHE_FILE', 'w') as f: f.write(content)
-          "
+          # ----- ZAKLĘCIE OSTATECZNE (OSZUKANIE PREPROCESORA C) -----
+          # Tutaj leży błąd. Plik "spatialite_private.h" nie ma odpowiednich pól. 
+          # My każemy preprocesorowi zamienić całe pole auth_context na listę brakujących pól!
+          # To na 1000% zepnie strukturę dla kompilatora.
+          echo "APP_CFLAGS += -Dauth_context=auth_context;char*gaia_geos_error_msg;char*gaia_geos_warning_msg;char*gaia_rttopo_error_msg;char*gaia_rttopo_warning_msg;int\ silent_mode" >> "$JNI_DIR/Application.mk"
 
-          # ----- NAPRAWA BŁĘDU LIBXML2 (Brakujący plik xmlversion.h) -----
+          # ----- NAPRAWA BŁĘDU LIBXML2 -----
           XMLVERSION_TEMPLATE=$(find $(pwd) -name 'xmlversion.h.in' | head -n 1)
           if [ -n "$XMLVERSION_TEMPLATE" ]; then
             TARGET_XMLVERSION="$(dirname "$XMLVERSION_TEMPLATE")/xmlversion.h"
@@ -117,7 +96,6 @@ jobs:
           echo "APP_CXXFLAGS += -I$SQLITE_INC -I$SPATIALITE_PRIV_INC -I$SPATIALITE_PUB_INC -I$SPATIALITE_DIR" >> "$JNI_DIR/Application.mk"
           echo "APP_CXXFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ_INC -I$ICONV_INC" >> "$JNI_DIR/Application.mk"
 
-          # ----- WYŁĄCZENIE RESTRYKCJI NOWEGO KOMPILATORA -----
           echo "APP_CFLAGS += -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
           echo "APP_CXXFLAGS += -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
 
