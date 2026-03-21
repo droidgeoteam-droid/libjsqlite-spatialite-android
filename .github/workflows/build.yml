@@ -27,10 +27,10 @@ jobs:
           echo "APP_PLATFORM := android-21" >> "$JNI_DIR/Application.mk"
           echo "APP_ALLOW_MISSING_DEPS := true" >> "$JNI_DIR/Application.mk"
 
-          # -------------------- CHIRURGICZNE CIĘCIE RASTERLITE2 I INNYCH BRAKÓW --------------------
-          # Odblokowujemy uprawnienia do zapisu dla całego repozytorium (zeby sed działał!)
+          # Nadanie pełnych uprawnień dla narzędzia SED
           chmod -R 777 .
-          
+
+          # -------------------- CHIRURGICZNE CIĘCIE RASTERLITE2 I INNYCH BRAKÓW --------------------
           sed -i '/librasterlite2/d' "$JNI_DIR/Android.mk"
           sed -i '/rasterlite2/d' "$JNI_DIR/Android.mk"
           sed -i '/freetype/d' "$JNI_DIR/Android.mk"
@@ -66,27 +66,13 @@ jobs:
           EOF
           
           touch "$SPATIALITE_DIR/librttopo.h"
+
+          # ----- WSTRZYKNIĘCIE BRAKUJĄCYCH PÓL DO STRUKTURY -----
+          # Szukamy starego, wadliwego pliku nagłówkowego
+          PRIV_HEADER=$(find "$SPATIALITE_DIR" -name "spatialite_private.h" | head -n 1)
           
-          # ----- TWORZYMY ŁATKĘ NA ZEPSUTĄ STRUKTURĘ -----
-          # Skoro edycja wewnątrz zawodziła, wstrzykniemy to jako wymuszony nagłówek (include file).
-          # Ten plik zostanie wklejony automatycznie do KAŻDEGO pliku C jeszcze przed jego kompilacją.
-          cat <<EOF > "$SPATIALITE_DIR/splite_patch.h"
-          #ifndef SPLITE_PATCH_H
-          #define SPLITE_PATCH_H
-          // Definiujemy chamskie makra, by kompilator ominął błędy pól w starym kodzie
-          #define gaia_geos_error_msg magic_dummy
-          #define gaia_geos_warning_msg magic_dummy
-          #define gaia_rttopo_error_msg magic_dummy
-          #define gaia_rttopo_warning_msg magic_dummy
-          #define silent_mode magic_dummy2
-          extern char* magic_dummy;
-          extern int magic_dummy2;
-          #endif
-          EOF
-          
-          # Dodajemy na samym początku pliku alloc_cache.c wywołanie do zmiennych ratunkowych
-          ALLOC_CACHE_FILE=$(find "$SPATIALITE_DIR" -name "alloc_cache.c" | head -n 1)
-          sed -i '1i char* magic_dummy = 0; int magic_dummy2 = 0;' "$ALLOC_CACHE_FILE"
+          # Magia awk: Znajduje "struct splite_internal_cache {" i tuż pod spodem wciska brakujące pola
+          awk '/struct splite_internal_cache \{/ { print; print "    char* gaia_geos_error_msg;\n    char* gaia_geos_warning_msg;\n    char* gaia_rttopo_error_msg;\n    char* gaia_rttopo_warning_msg;\n    int silent_mode;"; next }1' "$PRIV_HEADER" > temp.h && mv temp.h "$PRIV_HEADER"
 
           # ----- NAPRAWA BŁĘDU LIBXML2 (Brakujący plik xmlversion.h) -----
           XMLVERSION_TEMPLATE=$(find $(pwd) -name 'xmlversion.h.in' | head -n 1)
@@ -118,10 +104,9 @@ jobs:
           echo "APP_CXXFLAGS += -I$SQLITE_INC -I$SPATIALITE_PRIV_INC -I$SPATIALITE_PUB_INC -I$SPATIALITE_DIR" >> "$JNI_DIR/Application.mk"
           echo "APP_CXXFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ_INC -I$ICONV_INC" >> "$JNI_DIR/Application.mk"
 
-          # ----- WYŁĄCZENIE RESTRYKCJI NOWEGO KOMPILATORA WRAZ Z MAGIĄ PREPROCESORA -----
-          # Flaga -include fizycznie dokleja nasz wlasny plik naglówkowy na samą górę każdego pliku C.
-          echo "APP_CFLAGS += -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-error -fpermissive -include $SPATIALITE_DIR/splite_patch.h" >> "$JNI_DIR/Application.mk"
-          echo "APP_CXXFLAGS += -Wno-error -fpermissive -include $SPATIALITE_DIR/splite_patch.h" >> "$JNI_DIR/Application.mk"
+          # ----- WYŁĄCZENIE RESTRYKCJI NOWEGO KOMPILATORA -----
+          echo "APP_CFLAGS += -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
+          echo "APP_CXXFLAGS += -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
 
       - name: Przygotowanie Android NDK
         uses: nttld/setup-ndk@v1
