@@ -17,6 +17,7 @@ jobs:
           JNI_DIR=$(dirname "$MAIN_ANDROID_MK")
           PROJECT_DIR=$(dirname "$JNI_DIR")
           
+          echo "Znaleziono folder JNI w: $JNI_DIR"
           echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
           
           # Konfiguracja 16KB i architektur
@@ -27,7 +28,7 @@ jobs:
 
           chmod -R 777 .
 
-          # ----- CZYSZCZENIE PLIKU ANDROID.MK -----
+          # ----- CHIRURGICZNE CIĘCIE RASTERLITE2 -----
           sed -i '/librasterlite2/d' "$JNI_DIR/Android.mk"
           sed -i '/rasterlite2/d' "$JNI_DIR/Android.mk"
           sed -i '/freetype/d' "$JNI_DIR/Android.mk"
@@ -36,17 +37,23 @@ jobs:
           sed -i '/png/d' "$JNI_DIR/Android.mk"
           sed -i '/jpeg/d' "$JNI_DIR/Android.mk"
           sed -i '/webp/d' "$JNI_DIR/Android.mk"
+
+          sed -i '/#include.*rasterlite2/d' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
+          sed -i 's/void \*p_rl2_data = (void \*)rl2_alloc_private();/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
+          sed -i 's/rl2_init((sqlite3 \*)h->sqlite,p_rl2_data,0);/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
+          sed -i 's/rl2_init((sqlite3 \*)h->sqlite,0);/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
+          sed -i 's/(const char \*)rl2_version();/"wyciety_rasterlite";/g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
+          
+          # Usuwamy RTTOPO z konfiguracji Android.mk
           sed -i 's/-DENABLE_RTTOPO=1//g' "$JNI_DIR/Android.mk"
           sed -i 's/-DENABLE_GCP=1//g' "$JNI_DIR/Android.mk"
 
-          # ----- NALOT DYWANOWY W PYTHONIE (ŁATANIE WSZYSTKICH WERSJI) -----
+          # ----- NALOT DYWANOWY W PYTHONIE NA STRUKTURY -----
           python3 << 'EOF'
           import os, re
           for root, dirs, files in os.walk('.'):
               for file in files:
                   p = os.path.join(root, file)
-                  
-                  # 1. Naprawa KAŻDEGO alloc_cache.c w projekcie
                   if file == 'alloc_cache.c':
                       with open(p, 'r') as f: txt = f.read()
                       if 'static char* dummy_ptr;' not in txt:
@@ -56,19 +63,9 @@ jobs:
                       txt = txt.replace('cache->gaia_rttopo_error_msg', 'dummy_ptr')
                       txt = txt.replace('cache->gaia_rttopo_warning_msg', 'dummy_ptr')
                       txt = txt.replace('cache->silent_mode', 'dummy_int')
+                      txt = txt.replace('free (dummy_ptr);', '')
+                      txt = txt.replace('strcpy (dummy_ptr, msg);', '')
                       with open(p, 'w') as f: f.write(txt)
-                  
-                  # 2. Naprawa KAŻDEGO sqlite_jni.c w projekcie
-                  if file == 'sqlite_jni.c':
-                      with open(p, 'r') as f: txt = f.read()
-                      txt = re.sub(r'#include.*rasterlite2.*', '', txt)
-                      txt = txt.replace('void *p_rl2_data = (void *)rl2_alloc_private();', '//')
-                      txt = txt.replace('rl2_init((sqlite3 *)h->sqlite,p_rl2_data,0);', '//')
-                      txt = txt.replace('rl2_init((sqlite3 *)h->sqlite,0);', '//')
-                      txt = txt.replace('(const char *)rl2_version();', '"brak_rasterlite";')
-                      with open(p, 'w') as f: f.write(txt)
-                      
-                  # 3. Tworzenie XMLVERSION.H ze wszystkich szablonów
                   if file == 'xmlversion.h.in':
                       with open(p, 'r') as f: txt = f.read()
                       txt = re.sub(r'@[A-Z0-9_]*@', '0', txt)
@@ -76,7 +73,7 @@ jobs:
                       with open(target, 'w') as f: f.write(txt)
           EOF
           
-          # ----- TWORZYMY CONFIG.H i LIBRTTOPO WE WSZYSTKICH FOLDERACH SPATIALITE -----
+          # ----- TWORZYMY BRAKUJĄCY PLIK CONFIG.H DLA SPATIALITE -----
           find . -type d -name "libspatialite*" | while read -r sdir; do
             cat <<EOF > "$sdir/config.h"
           #ifndef CONFIG_H
@@ -93,7 +90,7 @@ jobs:
             touch "$sdir/librttopo.h"
           done
           
-          # ----- TWORZYMY PROJ.H WE WSZYSTKICH FOLDERACH PROJ -----
+          # ----- TWORZYMY PROJ.H -----
           find . -type d -name "proj-*" | while read -r pdir; do
             echo '#include "proj_api.h"' > "$pdir/src/proj.h" 2>/dev/null || true
             echo '#include "proj_api.h"' > "$pdir/proj.h" 2>/dev/null || true
@@ -107,19 +104,18 @@ jobs:
             done
           done
           
-          # Ścieżka specjalna GEOS
           find $(pwd) -name "export.h" | grep "/geos/" | sed 's|/geos/export.h||' | sort -u | while read -r d; do
               echo "APP_CFLAGS += -I$d" >> "$JNI_DIR/Application.mk"
               echo "APP_CXXFLAGS += -I$d" >> "$JNI_DIR/Application.mk"
           done
           
-          # Ścieżka specjalna LIBXML
           find $(pwd) -name "parser.h" | grep "/libxml/" | sed 's|/libxml/parser.h||' | sort -u | while read -r d; do
               echo "APP_CFLAGS += -I$d" >> "$JNI_DIR/Application.mk"
               echo "APP_CXXFLAGS += -I$d" >> "$JNI_DIR/Application.mk"
           done
           
-          echo "APP_CFLAGS += -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
+          # KLUCZOWE FLĄGI, KTÓRE USUNĄŁEM W POPRZEDNIM SKRYPCIE - PRZYWRÓCONE
+          echo "APP_CFLAGS += -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
           echo "APP_CXXFLAGS += -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
 
       - name: Przygotowanie Android NDK
