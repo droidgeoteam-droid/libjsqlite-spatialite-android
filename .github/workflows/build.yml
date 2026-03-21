@@ -18,8 +18,6 @@ jobs:
           PROJECT_DIR=$(dirname "$JNI_DIR")
           
           echo "Znaleziono folder JNI w: $JNI_DIR"
-          
-          # ZAPISANIE DO GITHUB_ENV - TEGO BRAKOWAŁO W POPRZEDNIM KROKU:
           echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
           
           # Konfiguracja 16KB i architektur
@@ -67,8 +65,16 @@ jobs:
           
           touch "$SPATIALITE_DIR/librttopo.h"
 
-          # ----- ZAKLĘCIE OSTATECZNE (OSZUKANIE PREPROCESORA C) -----
-          echo "APP_CFLAGS += -Dauth_context=auth_context;char*gaia_geos_error_msg;char*gaia_geos_warning_msg;char*gaia_rttopo_error_msg;char*gaia_rttopo_warning_msg;int\ silent_mode" >> "$JNI_DIR/Application.mk"
+          # ----- OSTATECZNA WERSJA NAPRAWY STRUKTURY -----
+          # Używamy Pythona do załadowania oryginalnego pliku, znalezienia struktury, wstrzyknięcia pól i bezpiecznego zapisu.
+          PRIV_HEADER=$(find "$SPATIALITE_DIR" -name "spatialite_private.h" | head -n 1)
+          python3 -c "
+          import re
+          with open('$PRIV_HEADER', 'r') as f: content = f.read()
+          # Znajdz deklaracje auth_context i zamien ja na paczke brakujacych zmiennych
+          content = content.replace('void *auth_context;', 'void *auth_context;\n    char* gaia_geos_error_msg;\n    char* gaia_geos_warning_msg;\n    char* gaia_rttopo_error_msg;\n    char* gaia_rttopo_warning_msg;\n    int silent_mode;')
+          with open('$PRIV_HEADER', 'w') as f: f.write(content)
+          "
 
           # ----- NAPRAWA BŁĘDU LIBXML2 -----
           XMLVERSION_TEMPLATE=$(find $(pwd) -name 'xmlversion.h.in' | head -n 1)
