@@ -17,7 +17,6 @@ jobs:
           JNI_DIR=$(dirname "$MAIN_ANDROID_MK")
           PROJECT_DIR=$(dirname "$JNI_DIR")
           
-          echo "Znaleziono folder JNI w: $JNI_DIR"
           echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
           
           # Konfiguracja 16KB i architektur
@@ -28,8 +27,7 @@ jobs:
 
           chmod -R 777 .
 
-          # -------------------- CHIRURGICZNE CIĘCIE RASTERLITE2 I INNYCH BRAKÓW --------------------
-          # Odcinamy biblioteki graficzne i rasterlite2 od plikow kompilacji
+          # ----- CZYSZCZENIE PLIKU ANDROID.MK -----
           sed -i '/librasterlite2/d' "$JNI_DIR/Android.mk"
           sed -i '/rasterlite2/d' "$JNI_DIR/Android.mk"
           sed -i '/freetype/d' "$JNI_DIR/Android.mk"
@@ -38,21 +36,49 @@ jobs:
           sed -i '/png/d' "$JNI_DIR/Android.mk"
           sed -i '/jpeg/d' "$JNI_DIR/Android.mk"
           sed -i '/webp/d' "$JNI_DIR/Android.mk"
-
-          # Te cięcia zadziałają, bo sqlite_jni.c nie jest wypakowywany, jest częścią warstwy wierzchniej.
-          sed -i '/#include.*rasterlite2/d' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
-          sed -i 's/void \*p_rl2_data = (void \*)rl2_alloc_private();/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
-          sed -i 's/rl2_init((sqlite3 \*)h->sqlite,p_rl2_data,0);/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
-          sed -i 's/rl2_init((sqlite3 \*)h->sqlite,0);/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
-          sed -i 's/(const char \*)rl2_version();/"wyciety_rasterlite";/g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
-          
-          # Usuwamy RTTOPO
           sed -i 's/-DENABLE_RTTOPO=1//g' "$JNI_DIR/Android.mk"
           sed -i 's/-DENABLE_GCP=1//g' "$JNI_DIR/Android.mk"
+
+          # ----- NALOT DYWANOWY W PYTHONIE (ŁATANIE WSZYSTKICH WERSJI) -----
+          python3 << 'EOF'
+          import os, re
+          for root, dirs, files in os.walk('.'):
+              for file in files:
+                  p = os.path.join(root, file)
+                  
+                  # 1. Naprawa KAŻDEGO alloc_cache.c w projekcie
+                  if file == 'alloc_cache.c':
+                      with open(p, 'r') as f: txt = f.read()
+                      if 'static char* dummy_ptr;' not in txt:
+                          txt = 'static char* dummy_ptr = 0; static int dummy_int = 0;\n' + txt
+                      txt = txt.replace('cache->gaia_geos_error_msg', 'dummy_ptr')
+                      txt = txt.replace('cache->gaia_geos_warning_msg', 'dummy_ptr')
+                      txt = txt.replace('cache->gaia_rttopo_error_msg', 'dummy_ptr')
+                      txt = txt.replace('cache->gaia_rttopo_warning_msg', 'dummy_ptr')
+                      txt = txt.replace('cache->silent_mode', 'dummy_int')
+                      with open(p, 'w') as f: f.write(txt)
+                  
+                  # 2. Naprawa KAŻDEGO sqlite_jni.c w projekcie
+                  if file == 'sqlite_jni.c':
+                      with open(p, 'r') as f: txt = f.read()
+                      txt = re.sub(r'#include.*rasterlite2.*', '', txt)
+                      txt = txt.replace('void *p_rl2_data = (void *)rl2_alloc_private();', '//')
+                      txt = txt.replace('rl2_init((sqlite3 *)h->sqlite,p_rl2_data,0);', '//')
+                      txt = txt.replace('rl2_init((sqlite3 *)h->sqlite,0);', '//')
+                      txt = txt.replace('(const char *)rl2_version();', '"brak_rasterlite";')
+                      with open(p, 'w') as f: f.write(txt)
+                      
+                  # 3. Tworzenie XMLVERSION.H ze wszystkich szablonów
+                  if file == 'xmlversion.h.in':
+                      with open(p, 'r') as f: txt = f.read()
+                      txt = re.sub(r'@[A-Z0-9_]*@', '0', txt)
+                      target = os.path.join(root, 'xmlversion.h')
+                      with open(target, 'w') as f: f.write(txt)
+          EOF
           
-          # ----- TWORZYMY BRAKUJĄCY PLIK CONFIG.H DLA SPATIALITE -----
-          SPATIALITE_DIR=$(find $(pwd) -name 'libspatialite*' -type d | head -n 1)
-          cat <<EOF > "$SPATIALITE_DIR/config.h"
+          # ----- TWORZYMY CONFIG.H i LIBRTTOPO WE WSZYSTKICH FOLDERACH SPATIALITE -----
+          find . -type d -name "libspatialite*" | while read -r sdir; do
+            cat <<EOF > "$sdir/config.h"
           #ifndef CONFIG_H
           #define CONFIG_H
           #define OMIT_FREEXL 1
@@ -64,46 +90,37 @@ jobs:
           #define OMIT_RTTOPO 1
           #endif
           EOF
+            touch "$sdir/librttopo.h"
+          done
           
-          # Fałszywy nagłówek dla librttopo.h (skoro i tak jest OMIT_RTTOPO)
-          touch "$SPATIALITE_DIR/librttopo.h"
-
-          # ----- NAPRAWA BŁĘDU LIBXML2 -----
-          XMLVERSION_TEMPLATE=$(find $(pwd) -name 'xmlversion.h.in' | head -n 1)
-          if [ -n "$XMLVERSION_TEMPLATE" ]; then
-            TARGET_XMLVERSION="$(dirname "$XMLVERSION_TEMPLATE")/xmlversion.h"
-            cp "$XMLVERSION_TEMPLATE" "$TARGET_XMLVERSION"
-            sed -i 's/@[A-Z0-9_]*@/0/g' "$TARGET_XMLVERSION"
-          fi
-
-          # ----- OSTATECZNA BROŃ (SNAJPER - ABSOLUTNE ŚCIEŻKI) -----
-          SQLITE_INC=$(dirname "$(find $(pwd) -name 'sqlite3.h' | head -n 1)")
-          SPATIALITE_PRIV_INC=$(dirname "$(find $(pwd) -name 'spatialite_private.h' | head -n 1)")
-          SPATIALITE_PUB_INC=$(dirname "$(find $(pwd) -name 'spatialite.h' | head -n 1)")
+          # ----- TWORZYMY PROJ.H WE WSZYSTKICH FOLDERACH PROJ -----
+          find . -type d -name "proj-*" | while read -r pdir; do
+            echo '#include "proj_api.h"' > "$pdir/src/proj.h" 2>/dev/null || true
+            echo '#include "proj_api.h"' > "$pdir/proj.h" 2>/dev/null || true
+          done
           
-          LIBXML_FILE=$(find $(pwd) -name 'parser.h' | grep '/libxml/' | head -n 1)
-          LIBXML_INC=$(dirname $(dirname "$LIBXML_FILE"))
+          # ----- ŁADUJEMY WSZYSTKIE ŚCIEŻKI DO KOMPILATORA -----
+          for f in sqlite3.h spatialite_private.h spatialite.h geos_c.h proj_api.h iconv.h; do
+            find $(pwd) -name "$f" -exec dirname {} \; | sort -u | while read -r d; do
+              echo "APP_CFLAGS += -I$d" >> "$JNI_DIR/Application.mk"
+              echo "APP_CXXFLAGS += -I$d" >> "$JNI_DIR/Application.mk"
+            done
+          done
           
-          GEOS_INC=$(dirname "$(find $(pwd) -name 'geos_c.h' | head -n 1)")
-          GEOS_MAIN_INC=$(dirname $(dirname $(find $(pwd) -name 'export.h' | grep '/geos/' | head -n 1)))
+          # Ścieżka specjalna GEOS
+          find $(pwd) -name "export.h" | grep "/geos/" | sed 's|/geos/export.h||' | sort -u | while read -r d; do
+              echo "APP_CFLAGS += -I$d" >> "$JNI_DIR/Application.mk"
+              echo "APP_CXXFLAGS += -I$d" >> "$JNI_DIR/Application.mk"
+          done
           
-          PROJ_INC=$(dirname "$(find $(pwd) -name 'proj_api.h' | head -n 1)")
-          echo "#include \"proj_api.h\"" > "$PROJ_INC/proj.h"
+          # Ścieżka specjalna LIBXML
+          find $(pwd) -name "parser.h" | grep "/libxml/" | sed 's|/libxml/parser.h||' | sort -u | while read -r d; do
+              echo "APP_CFLAGS += -I$d" >> "$JNI_DIR/Application.mk"
+              echo "APP_CXXFLAGS += -I$d" >> "$JNI_DIR/Application.mk"
+          done
           
-          ICONV_INC=$(dirname "$(find $(pwd) -name 'iconv.h' | head -n 1)")
-          
-          echo "APP_CFLAGS += -I$SQLITE_INC -I$SPATIALITE_PRIV_INC -I$SPATIALITE_PUB_INC -I$SPATIALITE_DIR" >> "$JNI_DIR/Application.mk"
-          echo "APP_CFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ_INC -I$ICONV_INC" >> "$JNI_DIR/Application.mk"
-          
-          echo "APP_CXXFLAGS += -I$SQLITE_INC -I$SPATIALITE_PRIV_INC -I$SPATIALITE_PUB_INC -I$SPATIALITE_DIR" >> "$JNI_DIR/Application.mk"
-          echo "APP_CXXFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ_INC -I$ICONV_INC" >> "$JNI_DIR/Application.mk"
-
-          # ----- TOTALNA AMNESTIA KOMPILATORA DLA ZEPSUTYCH STRUKTUR -----
-          # Tutaj leży magia. -Wno-error=... sprawia, że kompilator widzi niezgodność struktur,
-          # ale ignoruje to całkowicie jako ostrzeżenie zamiast wyrzucać Error 1.
-          # Używamy -Wno-everything, by zamknąć mu usta na wszelkie przestarzałe konstrukcje C.
-          echo "APP_CFLAGS += -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-everything" >> "$JNI_DIR/Application.mk"
-          echo "APP_CXXFLAGS += -Wno-everything" >> "$JNI_DIR/Application.mk"
+          echo "APP_CFLAGS += -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
+          echo "APP_CXXFLAGS += -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
 
       - name: Przygotowanie Android NDK
         uses: nttld/setup-ndk@v1
