@@ -17,7 +17,6 @@ jobs:
           JNI_DIR=$(dirname "$MAIN_ANDROID_MK")
           PROJECT_DIR=$(dirname "$JNI_DIR")
           
-          echo "Znaleziono folder JNI w: $JNI_DIR"
           echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
           
           # Konfiguracja 16KB i architektur
@@ -28,7 +27,7 @@ jobs:
 
           chmod -R 777 .
 
-          # ----- CHIRURGICZNE CIĘCIE RASTERLITE2 -----
+          # -------------------- CHIRURGICZNE CIĘCIE RASTERLITE2 --------------------
           sed -i '/librasterlite2/d' "$JNI_DIR/Android.mk"
           sed -i '/rasterlite2/d' "$JNI_DIR/Android.mk"
           sed -i '/freetype/d' "$JNI_DIR/Android.mk"
@@ -44,38 +43,13 @@ jobs:
           sed -i 's/rl2_init((sqlite3 \*)h->sqlite,0);/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           sed -i 's/(const char \*)rl2_version();/"wyciety_rasterlite";/g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           
-          # Usuwamy RTTOPO z konfiguracji Android.mk
+          # Usuwamy RTTOPO
           sed -i 's/-DENABLE_RTTOPO=1//g' "$JNI_DIR/Android.mk"
           sed -i 's/-DENABLE_GCP=1//g' "$JNI_DIR/Android.mk"
-
-          # ----- NALOT DYWANOWY W PYTHONIE NA STRUKTURY -----
-          python3 << 'EOF'
-          import os, re
-          for root, dirs, files in os.walk('.'):
-              for file in files:
-                  p = os.path.join(root, file)
-                  if file == 'alloc_cache.c':
-                      with open(p, 'r') as f: txt = f.read()
-                      if 'static char* dummy_ptr;' not in txt:
-                          txt = 'static char* dummy_ptr = 0; static int dummy_int = 0;\n' + txt
-                      txt = txt.replace('cache->gaia_geos_error_msg', 'dummy_ptr')
-                      txt = txt.replace('cache->gaia_geos_warning_msg', 'dummy_ptr')
-                      txt = txt.replace('cache->gaia_rttopo_error_msg', 'dummy_ptr')
-                      txt = txt.replace('cache->gaia_rttopo_warning_msg', 'dummy_ptr')
-                      txt = txt.replace('cache->silent_mode', 'dummy_int')
-                      txt = txt.replace('free (dummy_ptr);', '')
-                      txt = txt.replace('strcpy (dummy_ptr, msg);', '')
-                      with open(p, 'w') as f: f.write(txt)
-                  if file == 'xmlversion.h.in':
-                      with open(p, 'r') as f: txt = f.read()
-                      txt = re.sub(r'@[A-Z0-9_]*@', '0', txt)
-                      target = os.path.join(root, 'xmlversion.h')
-                      with open(target, 'w') as f: f.write(txt)
-          EOF
           
-          # ----- TWORZYMY BRAKUJĄCY PLIK CONFIG.H DLA SPATIALITE -----
-          find . -type d -name "libspatialite*" | while read -r sdir; do
-            cat <<EOF > "$sdir/config.h"
+          # ----- TWORZYMY BRAKUJĄCY CONFIG.H DLA SPATIALITE -----
+          SPATIALITE_5_DIR=$(find $(pwd) -type d -name 'libspatialite-5.0.0' | head -n 1)
+          cat <<EOF > "$SPATIALITE_5_DIR/config.h"
           #ifndef CONFIG_H
           #define CONFIG_H
           #define OMIT_FREEXL 1
@@ -87,34 +61,29 @@ jobs:
           #define OMIT_RTTOPO 1
           #endif
           EOF
-            touch "$sdir/librttopo.h"
-          done
           
-          # ----- TWORZYMY PROJ.H -----
-          find . -type d -name "proj-*" | while read -r pdir; do
-            echo '#include "proj_api.h"' > "$pdir/src/proj.h" 2>/dev/null || true
-            echo '#include "proj_api.h"' > "$pdir/proj.h" 2>/dev/null || true
+          touch "$SPATIALITE_5_DIR/librttopo.h"
+
+          # ----- WSTRZYKNIĘCIE ZMIENNYCH DO STRUKTURY -----
+          PRIV_HEADER=$(find "$SPATIALITE_5_DIR" -name "spatialite_private.h" | head -n 1)
+          python3 -c "
+          with open('$PRIV_HEADER', 'r') as f: content = f.read()
+          content = content.replace('void *auth_context;', 'void *auth_context;\n    char* gaia_geos_error_msg;\n    char* gaia_geos_warning_msg;\n    char* gaia_rttopo_error_msg;\n    char* gaia_rttopo_warning_msg;\n    int silent_mode;')
+          with open('$PRIV_HEADER', 'w') as f: f.write(content)
+          "
+
+          # ----- NAPRAWA BŁĘDU LIBXML2 -----
+          find $(pwd) -name 'xmlversion.h.in' | while read -r tmpl; do
+            cp "$tmpl" "$(dirname "$tmpl")/xmlversion.h"
+            sed -i 's/@[A-Z0-9_]*@/0/g' "$(dirname "$tmpl")/xmlversion.h"
           done
-          
-          # ----- ŁADUJEMY WSZYSTKIE ŚCIEŻKI DO KOMPILATORA -----
-          for f in sqlite3.h spatialite_private.h spatialite.h geos_c.h proj_api.h iconv.h; do
-            find $(pwd) -name "$f" -exec dirname {} \; | sort -u | while read -r d; do
-              echo "APP_CFLAGS += -I$d" >> "$JNI_DIR/Application.mk"
-              echo "APP_CXXFLAGS += -I$d" >> "$JNI_DIR/Application.mk"
-            done
+
+          # ----- NAPRAWA BŁĘDU PROJ -----
+          find $(pwd) -name 'proj_api.h' | while read -r p; do
+            echo '#include "proj_api.h"' > "$(dirname "$p")/proj.h"
           done
-          
-          find $(pwd) -name "export.h" | grep "/geos/" | sed 's|/geos/export.h||' | sort -u | while read -r d; do
-              echo "APP_CFLAGS += -I$d" >> "$JNI_DIR/Application.mk"
-              echo "APP_CXXFLAGS += -I$d" >> "$JNI_DIR/Application.mk"
-          done
-          
-          find $(pwd) -name "parser.h" | grep "/libxml/" | sed 's|/libxml/parser.h||' | sort -u | while read -r d; do
-              echo "APP_CFLAGS += -I$d" >> "$JNI_DIR/Application.mk"
-              echo "APP_CXXFLAGS += -I$d" >> "$JNI_DIR/Application.mk"
-          done
-          
-          # KLUCZOWE FLĄGI, KTÓRE USUNĄŁEM W POPRZEDNIM SKRYPCIE - PRZYWRÓCONE
+
+          # ----- WYŁĄCZENIE RESTRYKCJI NOWEGO KOMPILATORA -----
           echo "APP_CFLAGS += -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
           echo "APP_CXXFLAGS += -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
 
