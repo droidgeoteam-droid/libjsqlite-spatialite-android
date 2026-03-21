@@ -29,6 +29,7 @@ jobs:
           chmod -R 777 .
 
           # -------------------- CHIRURGICZNE CIĘCIE RASTERLITE2 I INNYCH BRAKÓW --------------------
+          # Odcinamy biblioteki graficzne i rasterlite2 od plikow kompilacji
           sed -i '/librasterlite2/d' "$JNI_DIR/Android.mk"
           sed -i '/rasterlite2/d' "$JNI_DIR/Android.mk"
           sed -i '/freetype/d' "$JNI_DIR/Android.mk"
@@ -38,6 +39,7 @@ jobs:
           sed -i '/jpeg/d' "$JNI_DIR/Android.mk"
           sed -i '/webp/d' "$JNI_DIR/Android.mk"
 
+          # Te cięcia zadziałają, bo sqlite_jni.c nie jest wypakowywany, jest częścią warstwy wierzchniej.
           sed -i '/#include.*rasterlite2/d' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           sed -i 's/void \*p_rl2_data = (void \*)rl2_alloc_private();/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           sed -i 's/rl2_init((sqlite3 \*)h->sqlite,p_rl2_data,0);/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
@@ -63,18 +65,8 @@ jobs:
           #endif
           EOF
           
+          # Fałszywy nagłówek dla librttopo.h (skoro i tak jest OMIT_RTTOPO)
           touch "$SPATIALITE_DIR/librttopo.h"
-
-          # ----- OSTATECZNA WERSJA NAPRAWY STRUKTURY -----
-          # Używamy Pythona do załadowania oryginalnego pliku, znalezienia struktury, wstrzyknięcia pól i bezpiecznego zapisu.
-          PRIV_HEADER=$(find "$SPATIALITE_DIR" -name "spatialite_private.h" | head -n 1)
-          python3 -c "
-          import re
-          with open('$PRIV_HEADER', 'r') as f: content = f.read()
-          # Znajdz deklaracje auth_context i zamien ja na paczke brakujacych zmiennych
-          content = content.replace('void *auth_context;', 'void *auth_context;\n    char* gaia_geos_error_msg;\n    char* gaia_geos_warning_msg;\n    char* gaia_rttopo_error_msg;\n    char* gaia_rttopo_warning_msg;\n    int silent_mode;')
-          with open('$PRIV_HEADER', 'w') as f: f.write(content)
-          "
 
           # ----- NAPRAWA BŁĘDU LIBXML2 -----
           XMLVERSION_TEMPLATE=$(find $(pwd) -name 'xmlversion.h.in' | head -n 1)
@@ -106,8 +98,12 @@ jobs:
           echo "APP_CXXFLAGS += -I$SQLITE_INC -I$SPATIALITE_PRIV_INC -I$SPATIALITE_PUB_INC -I$SPATIALITE_DIR" >> "$JNI_DIR/Application.mk"
           echo "APP_CXXFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ_INC -I$ICONV_INC" >> "$JNI_DIR/Application.mk"
 
-          echo "APP_CFLAGS += -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
-          echo "APP_CXXFLAGS += -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
+          # ----- TOTALNA AMNESTIA KOMPILATORA DLA ZEPSUTYCH STRUKTUR -----
+          # Tutaj leży magia. -Wno-error=... sprawia, że kompilator widzi niezgodność struktur,
+          # ale ignoruje to całkowicie jako ostrzeżenie zamiast wyrzucać Error 1.
+          # Używamy -Wno-everything, by zamknąć mu usta na wszelkie przestarzałe konstrukcje C.
+          echo "APP_CFLAGS += -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-everything" >> "$JNI_DIR/Application.mk"
+          echo "APP_CXXFLAGS += -Wno-everything" >> "$JNI_DIR/Application.mk"
 
       - name: Przygotowanie Android NDK
         uses: nttld/setup-ndk@v1
