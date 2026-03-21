@@ -1,4 +1,4 @@
-name: Zbuduj Android 16KB
+name: Zbuduj Android 16 KB
 on: 
   push:
   workflow_dispatch:
