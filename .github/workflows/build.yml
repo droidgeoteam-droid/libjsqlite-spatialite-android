@@ -17,6 +17,7 @@ jobs:
           JNI_DIR=$(dirname "$MAIN_ANDROID_MK")
           PROJECT_DIR=$(dirname "$JNI_DIR")
           
+          echo "Znaleziono folder JNI w: $JNI_DIR"
           echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
           
           # Konfiguracja 16KB i architektur
@@ -27,7 +28,7 @@ jobs:
 
           chmod -R 777 .
 
-          # -------------------- CHIRURGICZNE CIĘCIE RASTERLITE2 --------------------
+          # ----- CHIRURGICZNE CIĘCIE RASTERLITE2 -----
           sed -i '/librasterlite2/d' "$JNI_DIR/Android.mk"
           sed -i '/rasterlite2/d' "$JNI_DIR/Android.mk"
           sed -i '/freetype/d' "$JNI_DIR/Android.mk"
@@ -82,6 +83,15 @@ jobs:
           find $(pwd) -name 'proj_api.h' | while read -r p; do
             echo '#include "proj_api.h"' > "$(dirname "$p")/proj.h"
           done
+
+          # ----- RĘCZNE I BEZPIECZNE ŁADOWANIE ŚCIEŻEK -----
+          # Szukamy konkretnych wersji, które chcemy skompilować
+          SQLITE_DIR=$(find $(pwd) -type d -name 'sqlite-amalgamation-3280000' | head -n 1)
+          SPATIALITE_DIR=$(find $(pwd) -type d -name 'libspatialite-5.0.0' | head -n 1)
+          
+          # Ładujemy do kompilatora tylko tę jedną, wybraną bazę (bez mieszania z v3 czy v4)
+          echo "APP_CFLAGS += -I$SQLITE_DIR -I$SPATIALITE_DIR/src/headers" >> "$JNI_DIR/Application.mk"
+          echo "APP_CXXFLAGS += -I$SQLITE_DIR -I$SPATIALITE_DIR/src/headers" >> "$JNI_DIR/Application.mk"
 
           # ----- WYŁĄCZENIE RESTRYKCJI NOWEGO KOMPILATORA -----
           echo "APP_CFLAGS += -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
