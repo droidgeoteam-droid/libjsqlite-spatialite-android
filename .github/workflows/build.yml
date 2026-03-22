@@ -47,7 +47,7 @@ jobs:
           sed -i 's/-DENABLE_RTTOPO=1//g' "$JNI_DIR/Android.mk"
           sed -i 's/-DENABLE_GCP=1//g' "$JNI_DIR/Android.mk"
 
-          # ----- NALOT DYWANOWY W PYTHONIE -----
+          # ----- NALOT DYWANOWY W PYTHONIE NA STRUKTURY I PLIKI C -----
           python3 << 'EOF'
           import os, re
           for root, dirs, files in os.walk('.'):
@@ -73,13 +73,16 @@ jobs:
                           txt = '#include <config.h>\n#ifndef OMIT_RTTOPO\n' + txt + '\n#endif\n'
                       with open(p, 'w') as f: f.write(txt)
                       
-                  # 3. ZŁOMOWANIE GG_TRANSFORM.C ZE STARYM PROJ
-                  # Tu wymuszamy, zeby C zastąpiło brakującą nową definicję starą zdefiniowaną z góry, 
-                  # a w razie użycia nowych, niedostępnych komend (jak proj_trans_generic) - 
-                  # zastępujemy je fałszywym (pustym) wykonaniem, żeby kompilator przestał pytać o zmienne PJ.
                   if file == 'gg_transform.c':
                       with open(p, 'r') as f: txt = f.read()
                       txt = '#define PJ projPJ\n#define PJ_CONTEXT void\n#define PJ_FWD 1\n#define proj_trans_generic(a,b,c,d,e,f,g,h,i,j,k,l,m,n) 0\n' + txt
+                      with open(p, 'w') as f: f.write(txt)
+                  
+                  # NOWOŚĆ: Zwijamy zawartość całego xmla w warunek (skoro libxml2 wyrzuca błędy parsowania schema)
+                  if file == 'gg_xml.c':
+                      with open(p, 'r') as f: txt = f.read()
+                      if '#ifndef OMIT_LIBXML2' not in txt:
+                          txt = '#include <config.h>\n#ifndef OMIT_LIBXML2\n' + txt + '\n#endif\n'
                       with open(p, 'w') as f: f.write(txt)
                   
                   if file == 'xmlversion.h.in':
@@ -102,6 +105,7 @@ jobs:
           #define HAVE_UNISTD_H 1
           #define OMIT_RTTOPO 1
           #define OMIT_PROJ 1
+          #define OMIT_LIBXML2 1
           #endif
           EOF
           
