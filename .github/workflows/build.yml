@@ -78,9 +78,11 @@ jobs:
                       txt = '#define PJ projPJ\n#define PJ_CONTEXT void\n#define PJ_FWD 1\n#define proj_trans_generic(a,b,c,d,e,f,g,h,i,j,k,l,m,n) 0\n' + txt
                       with open(p, 'w') as f: f.write(txt)
                   
-                  # NOWOŚĆ: BEZWZGLĘDNE USUNIĘCIE ZEPSUTEGO KODU XML. Kompilator nie zobaczy już żadnych błędów ze zepsutą biblioteką libxml.
+                  # Odrąbanie plików LibXML2 (Omijamy kod zalezny od zepsutych, osieroconych modułów)
                   if file == 'gg_xml.c':
                       with open(p, 'w') as f: f.write('int dummy_xml_file = 0;')
+                  if file == 'virtualxpath.c':
+                      with open(p, 'w') as f: f.write('int dummy_virtualxpath_file = 0;')
                   
                   if file == 'xmlversion.h.in':
                       with open(p, 'r') as f: txt = f.read()
