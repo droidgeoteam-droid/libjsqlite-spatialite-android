@@ -73,17 +73,25 @@ jobs:
                           txt = '#include <config.h>\n#ifndef OMIT_RTTOPO\n' + txt + '\n#endif\n'
                       with open(p, 'w') as f: f.write(txt)
                       
+                  # 3. ZŁOMOWANIE GG_TRANSFORM.C ZE STARYM PROJ
                   if file == 'gg_transform.c':
                       with open(p, 'r') as f: txt = f.read()
                       txt = '#define PJ projPJ\n#define PJ_CONTEXT void\n#define PJ_FWD 1\n#define proj_trans_generic(a,b,c,d,e,f,g,h,i,j,k,l,m,n) 0\n' + txt
                       with open(p, 'w') as f: f.write(txt)
                   
-                  # Odrąbanie plików LibXML2 (Omijamy kod zalezny od zepsutych, osieroconych modułów)
+                  # Zwijamy XML-e
                   if file == 'gg_xml.c':
                       with open(p, 'w') as f: f.write('int dummy_xml_file = 0;')
                   if file == 'virtualxpath.c':
                       with open(p, 'w') as f: f.write('int dummy_virtualxpath_file = 0;')
                   
+                  # 4. NOWOŚĆ: Odcięcie uszkodzonego modułu Topologii, jeżeli znajduje się w 'topology'
+                  if '/topology/' in p and file.endswith('.c'):
+                      with open(p, 'r') as f: txt = f.read()
+                      if '#ifndef OMIT_RTTOPO' not in txt:
+                          txt = '#include <config.h>\n#ifndef OMIT_RTTOPO\n' + txt + '\n#endif\n'
+                      with open(p, 'w') as f: f.write(txt)
+
                   if file == 'xmlversion.h.in':
                       with open(p, 'r') as f: txt = f.read()
                       txt = re.sub(r'@[A-Z0-9_]*@', '0', txt)
