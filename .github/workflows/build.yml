@@ -62,7 +62,9 @@ jobs:
           #endif
           EOF
           
+          # Podkładamy puste pliki za wyciętą i brakującą w repozytorium bibliotekę rttopo
           touch "$SPATIALITE_5_DIR/librttopo.h"
+          touch "$SPATIALITE_5_DIR/librttopo_geom.h"
 
           # ----- TWORZYMY ZASTĘPCZY LOCALCHARSET.H DLA ANDROIDA -----
           cat <<EOF > "$SPATIALITE_5_DIR/localcharset.h"
