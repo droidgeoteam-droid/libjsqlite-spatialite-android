@@ -48,8 +48,8 @@ jobs:
           sed -i 's/-DENABLE_GCP=1//g' "$JNI_DIR/Android.mk"
           
           # ----- TWORZYMY BRAKUJĄCY CONFIG.H DLA SPATIALITE 5.0.0 -----
-          SPATIALITE_DIR=$(find $(pwd) -type d -name 'libspatialite-5.0.0' | head -n 1)
-          cat <<EOF > "$SPATIALITE_DIR/config.h"
+          SPATIALITE_5_DIR=$(find $(pwd) -type d -name 'libspatialite-5.0.0' | head -n 1)
+          cat <<EOF > "$SPATIALITE_5_DIR/config.h"
           #ifndef CONFIG_H
           #define CONFIG_H
           #define OMIT_FREEXL 1
@@ -62,10 +62,18 @@ jobs:
           #endif
           EOF
           
-          touch "$SPATIALITE_DIR/librttopo.h"
+          touch "$SPATIALITE_5_DIR/librttopo.h"
+
+          # ----- TWORZYMY ZASTĘPCZY LOCALCHARSET.H DLA ANDROIDA -----
+          cat <<EOF > "$SPATIALITE_5_DIR/localcharset.h"
+          #ifndef LOCALCHARSET_H
+          #define LOCALCHARSET_H
+          static inline const char *locale_charset() { return "UTF-8"; }
+          #endif
+          EOF
 
           # ----- WSTRZYKNIĘCIE ZMIENNYCH DO STRUKTURY -----
-          PRIV_HEADER=$(find "$SPATIALITE_DIR" -name "spatialite_private.h" | head -n 1)
+          PRIV_HEADER=$(find "$SPATIALITE_5_DIR" -name "spatialite_private.h" | head -n 1)
           python3 -c "
           with open('$PRIV_HEADER', 'r') as f: content = f.read()
           content = content.replace('void *auth_context;', 'void *auth_context;\n    char* gaia_geos_error_msg;\n    char* gaia_geos_warning_msg;\n    char* gaia_rttopo_error_msg;\n    char* gaia_rttopo_warning_msg;\n    int silent_mode;')
@@ -95,12 +103,11 @@ jobs:
           PROJ_INC=$(dirname "$(find $(pwd) -name 'proj_api.h' | head -n 1)")
           ICONV_INC=$(dirname "$(find $(pwd) -name 'iconv.h' | head -n 1)")
           
-          # Ładujemy do kompilatora TYLKO WŁAŚCIWE I NOWE ścieżki 
-          # oraz wymuszamy zaciąganie config.h bezpośrednio z głównego folderu SPATIALITE_DIR
-          echo "APP_CFLAGS += -I$SQLITE_DIR -I$SPATIALITE_DIR/src/headers -I$SPATIALITE_DIR" >> "$JNI_DIR/Application.mk"
+          # Ładujemy do kompilatora TYLKO WŁAŚCIWE I NOWE ścieżki
+          echo "APP_CFLAGS += -I$SQLITE_DIR -I$SPATIALITE_5_DIR/src/headers -I$SPATIALITE_5_DIR" >> "$JNI_DIR/Application.mk"
           echo "APP_CFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ_INC -I$ICONV_INC" >> "$JNI_DIR/Application.mk"
           
-          echo "APP_CXXFLAGS += -I$SQLITE_DIR -I$SPATIALITE_DIR/src/headers -I$SPATIALITE_DIR" >> "$JNI_DIR/Application.mk"
+          echo "APP_CXXFLAGS += -I$SQLITE_DIR -I$SPATIALITE_5_DIR/src/headers -I$SPATIALITE_5_DIR" >> "$JNI_DIR/Application.mk"
           echo "APP_CXXFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ_INC -I$ICONV_INC" >> "$JNI_DIR/Application.mk"
 
           # ----- WYŁĄCZENIE RESTRYKCJI NOWEGO KOMPILATORA -----
