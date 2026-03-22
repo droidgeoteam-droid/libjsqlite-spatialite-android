@@ -47,7 +47,7 @@ jobs:
           sed -i 's/-DENABLE_RTTOPO=1//g' "$JNI_DIR/Android.mk"
           sed -i 's/-DENABLE_GCP=1//g' "$JNI_DIR/Android.mk"
 
-          # ----- NALOT DYWANOWY W PYTHONIE NA STRUKTURY I PLIKI C -----
+          # ----- NALOT DYWANOWY W PYTHONIE -----
           python3 << 'EOF'
           import os, re
           for root, dirs, files in os.walk('.'):
@@ -72,6 +72,15 @@ jobs:
                       if '#ifndef OMIT_RTTOPO' not in txt:
                           txt = '#include <config.h>\n#ifndef OMIT_RTTOPO\n' + txt + '\n#endif\n'
                       with open(p, 'w') as f: f.write(txt)
+                      
+                  # 3. ZŁOMOWANIE GG_TRANSFORM.C ZE STARYM PROJ
+                  # Tu wymuszamy, zeby C zastąpiło brakującą nową definicję starą zdefiniowaną z góry, 
+                  # a w razie użycia nowych, niedostępnych komend (jak proj_trans_generic) - 
+                  # zastępujemy je fałszywym (pustym) wykonaniem, żeby kompilator przestał pytać o zmienne PJ.
+                  if file == 'gg_transform.c':
+                      with open(p, 'r') as f: txt = f.read()
+                      txt = '#define PJ projPJ\n#define PJ_CONTEXT void\n#define PJ_FWD 1\n#define proj_trans_generic(a,b,c,d,e,f,g,h,i,j,k,l,m,n) 0\n' + txt
+                      with open(p, 'w') as f: f.write(txt)
                   
                   if file == 'xmlversion.h.in':
                       with open(p, 'r') as f: txt = f.read()
@@ -92,6 +101,7 @@ jobs:
           #define HAVE_STDINT_H 1
           #define HAVE_UNISTD_H 1
           #define OMIT_RTTOPO 1
+          #define OMIT_PROJ 1
           #endif
           EOF
           
@@ -112,12 +122,6 @@ jobs:
           content = content.replace('void *auth_context;', 'void *auth_context;\n    char* gaia_geos_error_msg;\n    char* gaia_geos_warning_msg;\n    char* gaia_rttopo_error_msg;\n    char* gaia_rttopo_warning_msg;\n    int silent_mode;')
           with open('$PRIV_HEADER', 'w') as f: f.write(content)
           "
-
-          # ----- NAPRAWA BŁĘDU LIBXML2 -----
-          find $(pwd) -name 'xmlversion.h.in' | while read -r tmpl; do
-            cp "$tmpl" "$(dirname "$tmpl")/xmlversion.h"
-            sed -i 's/@[A-Z0-9_]*@/0/g' "$(dirname "$tmpl")/xmlversion.h"
-          done
 
           # ----- NAPRAWA BŁĘDU PROJ -----
           find $(pwd) -name 'proj_api.h' | while read -r p; do
@@ -142,10 +146,8 @@ jobs:
           echo "APP_CXXFLAGS += -I$SQLITE_DIR -I$SPATIALITE_5_DIR/src/headers -I$SPATIALITE_5_DIR" >> "$JNI_DIR/Application.mk"
           echo "APP_CXXFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ_INC -I$ICONV_INC" >> "$JNI_DIR/Application.mk"
 
-          # ----- WYŁĄCZENIE RESTRYKCJI I NOWEGO PROJ 6+ -----
-          # NOWOŚĆ: Flaga -DPROJ_NEW=0 mówi kodowi Spatialite, aby zignorował "PJ" i użył starego "projPJ".
-          echo "APP_CFLAGS += -DPROJ_NEW=0 -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
-          echo "APP_CXXFLAGS += -DPROJ_NEW=0 -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
+          echo "APP_CFLAGS += -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
+          echo "APP_CXXFLAGS += -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
 
       - name: Przygotowanie Android NDK
         uses: nttld/setup-ndk@v1
