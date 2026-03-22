@@ -17,7 +17,6 @@ jobs:
           JNI_DIR=$(dirname "$MAIN_ANDROID_MK")
           PROJECT_DIR=$(dirname "$JNI_DIR")
           
-          echo "Znaleziono folder JNI w: $JNI_DIR"
           echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
           
           # Konfiguracja 16KB i architektur
@@ -48,9 +47,9 @@ jobs:
           sed -i 's/-DENABLE_RTTOPO=1//g' "$JNI_DIR/Android.mk"
           sed -i 's/-DENABLE_GCP=1//g' "$JNI_DIR/Android.mk"
           
-          # ----- TWORZYMY BRAKUJĄCY CONFIG.H DLA SPATIALITE -----
-          SPATIALITE_5_DIR=$(find $(pwd) -type d -name 'libspatialite-5.0.0' | head -n 1)
-          cat <<EOF > "$SPATIALITE_5_DIR/config.h"
+          # ----- TWORZYMY BRAKUJĄCY CONFIG.H DLA SPATIALITE 5.0.0 -----
+          SPATIALITE_DIR=$(find $(pwd) -type d -name 'libspatialite-5.0.0' | head -n 1)
+          cat <<EOF > "$SPATIALITE_DIR/config.h"
           #ifndef CONFIG_H
           #define CONFIG_H
           #define OMIT_FREEXL 1
@@ -63,10 +62,10 @@ jobs:
           #endif
           EOF
           
-          touch "$SPATIALITE_5_DIR/librttopo.h"
+          touch "$SPATIALITE_DIR/librttopo.h"
 
           # ----- WSTRZYKNIĘCIE ZMIENNYCH DO STRUKTURY -----
-          PRIV_HEADER=$(find "$SPATIALITE_5_DIR" -name "spatialite_private.h" | head -n 1)
+          PRIV_HEADER=$(find "$SPATIALITE_DIR" -name "spatialite_private.h" | head -n 1)
           python3 -c "
           with open('$PRIV_HEADER', 'r') as f: content = f.read()
           content = content.replace('void *auth_context;', 'void *auth_context;\n    char* gaia_geos_error_msg;\n    char* gaia_geos_warning_msg;\n    char* gaia_rttopo_error_msg;\n    char* gaia_rttopo_warning_msg;\n    int silent_mode;')
@@ -85,13 +84,24 @@ jobs:
           done
 
           # ----- RĘCZNE I BEZPIECZNE ŁADOWANIE ŚCIEŻEK -----
-          # Szukamy konkretnych wersji, które chcemy skompilować
           SQLITE_DIR=$(find $(pwd) -type d -name 'sqlite-amalgamation-3280000' | head -n 1)
-          SPATIALITE_DIR=$(find $(pwd) -type d -name 'libspatialite-5.0.0' | head -n 1)
           
-          # Ładujemy do kompilatora tylko tę jedną, wybraną bazę (bez mieszania z v3 czy v4)
-          echo "APP_CFLAGS += -I$SQLITE_DIR -I$SPATIALITE_DIR/src/headers" >> "$JNI_DIR/Application.mk"
-          echo "APP_CXXFLAGS += -I$SQLITE_DIR -I$SPATIALITE_DIR/src/headers" >> "$JNI_DIR/Application.mk"
+          LIBXML_FILE=$(find $(pwd) -name 'parser.h' | grep '/libxml/' | head -n 1)
+          LIBXML_INC=$(dirname $(dirname "$LIBXML_FILE"))
+          
+          GEOS_INC=$(dirname "$(find $(pwd) -name 'geos_c.h' | head -n 1)")
+          GEOS_MAIN_INC=$(dirname $(dirname $(find $(pwd) -name 'export.h' | grep '/geos/' | head -n 1)))
+          
+          PROJ_INC=$(dirname "$(find $(pwd) -name 'proj_api.h' | head -n 1)")
+          ICONV_INC=$(dirname "$(find $(pwd) -name 'iconv.h' | head -n 1)")
+          
+          # Ładujemy do kompilatora TYLKO WŁAŚCIWE I NOWE ścieżki 
+          # oraz wymuszamy zaciąganie config.h bezpośrednio z głównego folderu SPATIALITE_DIR
+          echo "APP_CFLAGS += -I$SQLITE_DIR -I$SPATIALITE_DIR/src/headers -I$SPATIALITE_DIR" >> "$JNI_DIR/Application.mk"
+          echo "APP_CFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ_INC -I$ICONV_INC" >> "$JNI_DIR/Application.mk"
+          
+          echo "APP_CXXFLAGS += -I$SQLITE_DIR -I$SPATIALITE_DIR/src/headers -I$SPATIALITE_DIR" >> "$JNI_DIR/Application.mk"
+          echo "APP_CXXFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ_INC -I$ICONV_INC" >> "$JNI_DIR/Application.mk"
 
           # ----- WYŁĄCZENIE RESTRYKCJI NOWEGO KOMPILATORA -----
           echo "APP_CFLAGS += -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
