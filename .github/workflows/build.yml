@@ -94,6 +94,14 @@ jobs:
                       txt = re.sub(r'@[A-Z0-9_]*@', '0', txt)
                       target = os.path.join(root, 'xmlversion.h')
                       with open(target, 'w') as f: f.write(txt)
+
+                  # -----------------------------------------------------
+                  # NOWOŚĆ: Naprawa VERSION z pominięciem preprocesora C++
+                  # -----------------------------------------------------
+                  if file == 'version.c' and 'versioninfo' in root:
+                      with open(p, 'r') as f: txt = f.read()
+                      txt = txt.replace('VERSION', '"5.0.0"')
+                      with open(p, 'w') as f: f.write(txt)
           EOF
           
           # ----- TWORZYMY BRAKUJĄCY CONFIG.H DLA SPATIALITE 5.0.0 -----
@@ -133,9 +141,13 @@ jobs:
           "
 
           # ----- NAPRAWA BŁĘDU PROJ -----
-          find $(pwd) -name 'proj_api.h' | while read -r p; do
-            echo '#include "proj_api.h"' > "$(dirname "$p")/proj.h"
-          done
+          # Tutaj czyścimy "snajpera". Usuwamy poprzednie podpinanie starego proj_api.h.
+          PROJ6_DIR=$(find $(pwd) -type d -name 'proj-6.1.1' | head -n 1)
+          PROJ4_DIR=$(find $(pwd) -type d -name 'proj-4.9.1' | head -n 1)
+
+          # Kopiujemy nowy plik nagłówkowy PROJ, aby był widoczny bezbłędnie dla kompilatora:
+          cp "$PROJ6_DIR/src/proj.h" "$PROJ6_DIR/include/proj.h" 2>/dev/null || true
+          cp "$PROJ4_DIR/src/proj_api.h" "$PROJ6_DIR/include/proj_api.h" 2>/dev/null || true
 
           # ----- RĘCZNE I BEZPIECZNE ŁADOWANIE ŚCIEŻEK I WERSJI -----
           SQLITE_DIR=$(find $(pwd) -type d -name 'sqlite-amalgamation-3280000' | head -n 1)
@@ -146,21 +158,17 @@ jobs:
           GEOS_INC=$(dirname "$(find $(pwd) -name 'geos_c.h' | head -n 1)")
           GEOS_MAIN_INC=$(dirname $(dirname $(find $(pwd) -name 'export.h' | grep '/geos/' | head -n 1)))
           
-          PROJ_INC=$(dirname "$(find $(pwd) -name 'proj_api.h' | head -n 1)")
           ICONV_INC=$(dirname "$(find $(pwd) -name 'iconv.h' | head -n 1)")
           
-          # NOWOŚĆ: Skoro buduje proj-6.1.1, musimy wskazać jego główny folder "include" do plików .hpp
-          PROJ6_DIR=$(find $(pwd) -type d -name 'proj-6.1.1' | head -n 1)
-          PROJ6_INC="$PROJ6_DIR/include"
-          
+          # Ładujemy ścieżki do flag, ALE pomijamy ścieżkę do starego PROJ-4.9.1, żeby wczytał nową!
           echo "APP_CFLAGS += -I$SQLITE_DIR -I$SPATIALITE_5_DIR/src/headers -I$SPATIALITE_5_DIR" >> "$JNI_DIR/Application.mk"
-          echo "APP_CFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ_INC -I$ICONV_INC -I$PROJ6_INC" >> "$JNI_DIR/Application.mk"
+          echo "APP_CFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ6_DIR/include -I$PROJ6_DIR/src -I$ICONV_INC" >> "$JNI_DIR/Application.mk"
           
           echo "APP_CXXFLAGS += -I$SQLITE_DIR -I$SPATIALITE_5_DIR/src/headers -I$SPATIALITE_5_DIR" >> "$JNI_DIR/Application.mk"
-          echo "APP_CXXFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ_INC -I$ICONV_INC -I$PROJ6_INC -I$PROJ6_DIR/src" >> "$JNI_DIR/Application.mk"
+          echo "APP_CXXFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ6_DIR/include -I$PROJ6_DIR/src -I$ICONV_INC" >> "$JNI_DIR/Application.mk"
 
-          echo "APP_CFLAGS += -DPROJ_NEW=0 -DVERSION=\\\"5.0.0\\\" -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
-          echo "APP_CXXFLAGS += -DPROJ_NEW=0 -DVERSION=\\\"5.0.0\\\" -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
+          echo "APP_CFLAGS += -DPROJ_NEW=0 -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
+          echo "APP_CXXFLAGS += -DPROJ_NEW=0 -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
 
       - name: Przygotowanie Android NDK
         uses: nttld/setup-ndk@v1
