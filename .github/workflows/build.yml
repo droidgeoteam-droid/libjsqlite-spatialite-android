@@ -100,12 +100,14 @@ jobs:
                       txt = txt.replace('VERSION', '"5.0.0"')
                       with open(p, 'w') as f: f.write(txt)
 
-                  # NOWOŚĆ: Tworzymy zaginiony plik konfiguracyjny dla JSON-c
+                  # NAPRAWA JSON_CONFIG (Tym razem wpisujemy kompilatorowi obsługę strdup i snprintf)
                   if file == 'json_config.h.win32':
                       with open(p, 'r') as f: txt = f.read()
-                      # Usuwamy dziwne makra windowsowe, zeby androidowy kompilator go strawil
                       txt = re.sub(r'#define HAVE_DECL_ISINF 1', '', txt)
                       txt = re.sub(r'#define HAVE_DECL_ISNAN 1', '', txt)
+                      
+                      txt += '\n#define HAVE_STRDUP 1\n#define HAVE_SNPRINTF 1\n#define HAVE_VSNPRINTF 1\n#define HAVE_VASPRINTF 1\n'
+                      
                       target = os.path.join(root, 'json_config.h')
                       with open(target, 'w') as f: f.write(txt)
           EOF
@@ -153,9 +155,7 @@ jobs:
           cp "$PROJ6_DIR/src/proj.h" "$PROJ6_DIR/include/proj.h" 2>/dev/null || true
           cp "$PROJ4_DIR/src/proj_api.h" "$PROJ6_DIR/include/proj_api.h" 2>/dev/null || true
 
-          # ----- ODKRYWAMY PLIK Z DEF. DLA JSON-C (NULL i SIZE_T) -----
           JSON_DIR=$(find $(pwd) -type d -name 'json-c-0.13.1' | head -n 1)
-          echo "#include <stddef.h>" > "$JSON_DIR/config.h" 
 
           # ----- RĘCZNE I BEZPIECZNE ŁADOWANIE ŚCIEŻEK -----
           SQLITE_DIR=$(find $(pwd) -type d -name 'sqlite-amalgamation-3280000' | head -n 1)
