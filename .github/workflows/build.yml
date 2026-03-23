@@ -24,10 +24,16 @@ jobs:
           echo "APP_ABI := arm64-v8a armeabi-v7a x86_64 x86" >> "$JNI_DIR/Application.mk"
           echo "APP_PLATFORM := android-21" >> "$JNI_DIR/Application.mk"
           echo "APP_ALLOW_MISSING_DEPS := true" >> "$JNI_DIR/Application.mk"
+          echo "APP_CPPFLAGS += -std=gnu++11" >> "$JNI_DIR/Application.mk"
 
           chmod -R 777 .
 
-          # ----- CHIRURGICZNE CIĘCIE RASTERLITE2 -----
+          # ----- WYCIĘCIE MODUŁÓW Z GŁÓWNEGO ANDROID.MK -----
+          # Po cichu odcinamy te moduły, aby w ogóle nie brały udziału w kompilacji!
+          sed -i 's/ rttopo//g' "$JNI_DIR/Android.mk"
+          sed -i 's/ rasterlite2//g' "$JNI_DIR/Android.mk"
+
+          # ----- CHIRURGICZNE CIĘCIE RASTERLITE2 I RTTOPO Z KONFIGURACJI -----
           sed -i '/librasterlite2/d' "$JNI_DIR/Android.mk"
           sed -i '/rasterlite2/d' "$JNI_DIR/Android.mk"
           sed -i '/freetype/d' "$JNI_DIR/Android.mk"
@@ -43,7 +49,6 @@ jobs:
           sed -i 's/rl2_init((sqlite3 \*)h->sqlite,0);/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           sed -i 's/(const char \*)rl2_version();/"wyciety_rasterlite";/g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           
-          # Usuwamy RTTOPO
           sed -i 's/-DENABLE_RTTOPO=1//g' "$JNI_DIR/Android.mk"
           sed -i 's/-DENABLE_GCP=1//g' "$JNI_DIR/Android.mk"
 
@@ -104,12 +109,10 @@ jobs:
                       with open(p, 'r') as f: txt = f.read()
                       txt = re.sub(r'#define HAVE_DECL_ISINF 1', '', txt)
                       txt = re.sub(r'#define HAVE_DECL_ISNAN 1', '', txt)
-                      # Dodane flagi STDARG i VA_COPY oraz VSNPRINTF wymagane przez printbuf.c
                       txt += '\n#define HAVE_STRDUP 1\n#define HAVE_SNPRINTF 1\n#define HAVE_VSNPRINTF 1\n#define HAVE_VASPRINTF 1\n#define HAVE_STRNCASECMP 1\n#define HAVE_STDARG_H 1\n#define HAVE_VA_COPY 1\n#define HAVE_VPRINTF 1\n'
                       target = os.path.join(root, 'json_config.h')
                       with open(target, 'w') as f: f.write(txt)
                   
-                  # NOWOŚĆ: Fizycznie usuwamy z kodu źródłowego wymuszanie starych, niepotrzebnych komend
                   if file == 'printbuf.c':
                       with open(p, 'r') as f: txt = f.read()
                       txt = txt.replace('# error Not enough var arg support!', '// zneutralizowane')
