@@ -24,6 +24,7 @@ jobs:
           echo "APP_ABI := arm64-v8a armeabi-v7a x86_64 x86" >> "$JNI_DIR/Application.mk"
           echo "APP_PLATFORM := android-21" >> "$JNI_DIR/Application.mk"
           echo "APP_ALLOW_MISSING_DEPS := true" >> "$JNI_DIR/Application.mk"
+          echo "APP_CPPFLAGS += -std=gnu++11" >> "$JNI_DIR/Application.mk"
 
           chmod -R 777 .
 
@@ -83,6 +84,12 @@ jobs:
                   if file == 'virtualxpath.c':
                       with open(p, 'w') as f: f.write('int dummy_virtualxpath_file = 0;')
                   
+                  # -------------------------------------------------------------
+                  # NOWOŚĆ: Fizyczne wyrzucenie pliku od Virtual Text / FreeXL 
+                  # -------------------------------------------------------------
+                  if file == 'virtualtext.c':
+                      with open(p, 'w') as f: f.write('int dummy_virtualtext_file = 0;')
+                  
                   if '/topology/' in p and file.endswith('.c'):
                       with open(p, 'r') as f: txt = f.read()
                       if '#ifndef OMIT_RTTOPO' not in txt:
@@ -133,7 +140,6 @@ jobs:
           #define OMIT_RTTOPO 1
           #define OMIT_PROJ 1
           #define OMIT_LIBXML2 1
-          #define OMIT_ICONV 0
           static void fnct_PROJ_GuessSridFromSHP() {} 
           #endif
           EOF
@@ -141,7 +147,12 @@ jobs:
           touch "$SPATIALITE_5_DIR/librttopo.h"
           touch "$SPATIALITE_5_DIR/librttopo_geom.h"
 
-          # (Usunęliśmy stąd tworzenie localcharset.h)
+          cat <<EOF > "$SPATIALITE_5_DIR/localcharset.h"
+          #ifndef LOCALCHARSET_H
+          #define LOCALCHARSET_H
+          static inline const char *locale_charset() { return "UTF-8"; }
+          #endif
+          EOF
 
           # ----- WSTRZYKNIĘCIE ZMIENNYCH DO STRUKTURY -----
           PRIV_HEADER=$(find "$SPATIALITE_5_DIR" -name "spatialite_private.h" | head -n 1)
@@ -172,17 +183,13 @@ jobs:
           GEOS_INC="$GEOS_DIR/capi"
           GEOS_MAIN_INC="$GEOS_DIR/include"
           
-          # Podpinamy główną ścieżkę do iconv
-          ICONV_DIR=$(find $(pwd) -type d -name 'libiconv-1.16' | head -n 1)
-          ICONV_INC="$ICONV_DIR/include"
-          ICONV_LIB="$ICONV_DIR/libcharset/include"
+          ICONV_INC=$(dirname "$(find $(pwd) -name 'iconv.h' | head -n 1)")
           
           echo "APP_CFLAGS += -include stddef.h -include stdarg.h -include fcntl.h -I$SQLITE_DIR -I$SPATIALITE_5_DIR/src/headers -I$SPATIALITE_5_DIR" >> "$JNI_DIR/Application.mk"
-          # Wrzucamy iconv w globalne przeszukiwanie
-          echo "APP_CFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ6_DIR/include -I$PROJ6_DIR/src -I$ICONV_INC -I$ICONV_LIB -I$JSON_DIR" >> "$JNI_DIR/Application.mk"
+          echo "APP_CFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ6_DIR/include -I$PROJ6_DIR/src -I$ICONV_INC -I$JSON_DIR" >> "$JNI_DIR/Application.mk"
           
           echo "APP_CXXFLAGS += -I$SQLITE_DIR -I$SPATIALITE_5_DIR/src/headers -I$SPATIALITE_5_DIR" >> "$JNI_DIR/Application.mk"
-          echo "APP_CXXFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ6_DIR/include -I$PROJ6_DIR/src -I$ICONV_INC -I$ICONV_LIB -I$JSON_DIR" >> "$JNI_DIR/Application.mk"
+          echo "APP_CXXFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ6_DIR/include -I$PROJ6_DIR/src -I$ICONV_INC -I$JSON_DIR" >> "$JNI_DIR/Application.mk"
 
           echo "APP_CFLAGS += -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
           echo "APP_CXXFLAGS += -std=gnu++11 -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
