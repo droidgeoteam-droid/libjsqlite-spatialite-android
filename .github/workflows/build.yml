@@ -24,6 +24,9 @@ jobs:
           echo "APP_ABI := arm64-v8a armeabi-v7a x86_64 x86" >> "$JNI_DIR/Application.mk"
           echo "APP_PLATFORM := android-21" >> "$JNI_DIR/Application.mk"
           echo "APP_ALLOW_MISSING_DEPS := true" >> "$JNI_DIR/Application.mk"
+          
+          # Cofamy C++ w czasie do standardu gnu++11 (lub c++11), który nadal obsługuje auto_ptr
+          echo "APP_CPPFLAGS += -std=gnu++11" >> "$JNI_DIR/Application.mk"
 
           chmod -R 777 .
 
@@ -95,9 +98,6 @@ jobs:
                       target = os.path.join(root, 'xmlversion.h')
                       with open(target, 'w') as f: f.write(txt)
 
-                  # -----------------------------------------------------
-                  # NOWOŚĆ: Naprawa VERSION z pominięciem preprocesora C++
-                  # -----------------------------------------------------
                   if file == 'version.c' and 'versioninfo' in root:
                       with open(p, 'r') as f: txt = f.read()
                       txt = txt.replace('VERSION', '"5.0.0"')
@@ -141,29 +141,30 @@ jobs:
           "
 
           # ----- NAPRAWA BŁĘDU PROJ -----
-          # Tutaj czyścimy "snajpera". Usuwamy poprzednie podpinanie starego proj_api.h.
           PROJ6_DIR=$(find $(pwd) -type d -name 'proj-6.1.1' | head -n 1)
           PROJ4_DIR=$(find $(pwd) -type d -name 'proj-4.9.1' | head -n 1)
 
-          # Kopiujemy nowy plik nagłówkowy PROJ, aby był widoczny bezbłędnie dla kompilatora:
           cp "$PROJ6_DIR/src/proj.h" "$PROJ6_DIR/include/proj.h" 2>/dev/null || true
           cp "$PROJ4_DIR/src/proj_api.h" "$PROJ6_DIR/include/proj_api.h" 2>/dev/null || true
 
-          # ----- RĘCZNE I BEZPIECZNE ŁADOWANIE ŚCIEŻEK I WERSJI -----
+          # ----- RĘCZNE I BEZPIECZNE ŁADOWANIE ŚCIEŻEK (IZOLACJA WERSJI) -----
           SQLITE_DIR=$(find $(pwd) -type d -name 'sqlite-amalgamation-3280000' | head -n 1)
           
           LIBXML_FILE=$(find $(pwd) -name 'parser.h' | grep '/libxml/' | head -n 1)
           LIBXML_INC=$(dirname $(dirname "$LIBXML_FILE"))
           
-          GEOS_INC=$(dirname "$(find $(pwd) -name 'geos_c.h' | head -n 1)")
-          GEOS_MAIN_INC=$(dirname $(dirname $(find $(pwd) -name 'export.h' | grep '/geos/' | head -n 1)))
+          # Wybieramy konkretnie nowszą paczkę GEOS 3.7.2.
+          GEOS_DIR=$(find $(pwd) -type d -name 'geos-3.7.2' | head -n 1)
+          GEOS_INC="$GEOS_DIR/capi"
+          GEOS_MAIN_INC="$GEOS_DIR/include"
           
           ICONV_INC=$(dirname "$(find $(pwd) -name 'iconv.h' | head -n 1)")
           
-          # Ładujemy ścieżki do flag, ALE pomijamy ścieżkę do starego PROJ-4.9.1, żeby wczytał nową!
+          # CFLAGS
           echo "APP_CFLAGS += -I$SQLITE_DIR -I$SPATIALITE_5_DIR/src/headers -I$SPATIALITE_5_DIR" >> "$JNI_DIR/Application.mk"
           echo "APP_CFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ6_DIR/include -I$PROJ6_DIR/src -I$ICONV_INC" >> "$JNI_DIR/Application.mk"
           
+          # CXXFLAGS
           echo "APP_CXXFLAGS += -I$SQLITE_DIR -I$SPATIALITE_5_DIR/src/headers -I$SPATIALITE_5_DIR" >> "$JNI_DIR/Application.mk"
           echo "APP_CXXFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ6_DIR/include -I$PROJ6_DIR/src -I$ICONV_INC" >> "$JNI_DIR/Application.mk"
 
