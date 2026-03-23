@@ -100,14 +100,11 @@ jobs:
                       txt = txt.replace('VERSION', '"5.0.0"')
                       with open(p, 'w') as f: f.write(txt)
 
-                  # NAPRAWA JSON_CONFIG 
                   if file == 'json_config.h.win32':
                       with open(p, 'r') as f: txt = f.read()
                       txt = re.sub(r'#define HAVE_DECL_ISINF 1', '', txt)
                       txt = re.sub(r'#define HAVE_DECL_ISNAN 1', '', txt)
-                      # Dodana kolejna flaga upewniająca o posiadaniu strncasecmp i innych uniksowych zabawek
                       txt += '\n#define HAVE_STRDUP 1\n#define HAVE_SNPRINTF 1\n#define HAVE_VSNPRINTF 1\n#define HAVE_VASPRINTF 1\n#define HAVE_STRNCASECMP 1\n'
-                      
                       target = os.path.join(root, 'json_config.h')
                       with open(target, 'w') as f: f.write(txt)
           EOF
@@ -156,7 +153,10 @@ jobs:
           cp "$PROJ4_DIR/src/proj_api.h" "$PROJ6_DIR/include/proj_api.h" 2>/dev/null || true
 
           JSON_DIR=$(find $(pwd) -type d -name 'json-c-0.13.1' | head -n 1)
-          echo "#include <stddef.h>" > "$JSON_DIR/config.h" 
+          
+          # TUTAJ ROBIMY WSTAWKĘ - dodajemy fcntl.h obok stddef.h dla wbudowanego json
+          echo "#include <stddef.h>" > "$JSON_DIR/config.h"
+          echo "#include <fcntl.h>" >> "$JSON_DIR/config.h"
 
           # ----- RĘCZNE I BEZPIECZNE ŁADOWANIE ŚCIEŻEK -----
           SQLITE_DIR=$(find $(pwd) -type d -name 'sqlite-amalgamation-3280000' | head -n 1)
@@ -170,7 +170,8 @@ jobs:
           
           ICONV_INC=$(dirname "$(find $(pwd) -name 'iconv.h' | head -n 1)")
           
-          echo "APP_CFLAGS += -include stddef.h -I$SQLITE_DIR -I$SPATIALITE_5_DIR/src/headers -I$SPATIALITE_5_DIR" >> "$JNI_DIR/Application.mk"
+          # Dodajemy na końcu fcntl.h do APP_CFLAGS, aby upewnić się, że kompilator NDK na pewno je wczyta dla json_util.c
+          echo "APP_CFLAGS += -include stddef.h -include fcntl.h -I$SQLITE_DIR -I$SPATIALITE_5_DIR/src/headers -I$SPATIALITE_5_DIR" >> "$JNI_DIR/Application.mk"
           echo "APP_CFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ6_DIR/include -I$PROJ6_DIR/src -I$ICONV_INC -I$JSON_DIR" >> "$JNI_DIR/Application.mk"
           
           echo "APP_CXXFLAGS += -I$SQLITE_DIR -I$SPATIALITE_5_DIR/src/headers -I$SPATIALITE_5_DIR" >> "$JNI_DIR/Application.mk"
