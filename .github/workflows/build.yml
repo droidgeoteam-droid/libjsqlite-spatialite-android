@@ -24,6 +24,9 @@ jobs:
           echo "APP_ABI := arm64-v8a armeabi-v7a x86_64 x86" >> "$JNI_DIR/Application.mk"
           echo "APP_PLATFORM := android-21" >> "$JNI_DIR/Application.mk"
           echo "APP_ALLOW_MISSING_DEPS := true" >> "$JNI_DIR/Application.mk"
+          
+          # Cofamy C++ w czasie do standardu gnu++11 (lub c++11), który nadal obsługuje auto_ptr w GEOS
+          echo "APP_CPPFLAGS += -std=gnu++11" >> "$JNI_DIR/Application.mk"
 
           chmod -R 777 .
 
@@ -43,7 +46,7 @@ jobs:
           sed -i 's/rl2_init((sqlite3 \*)h->sqlite,0);/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           sed -i 's/(const char \*)rl2_version();/"wyciety_rasterlite";/g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           
-          # Usuwamy RTTOPO
+          # Usuwamy RTTOPO z pliku kompilacji
           sed -i 's/-DENABLE_RTTOPO=1//g' "$JNI_DIR/Android.mk"
           sed -i 's/-DENABLE_GCP=1//g' "$JNI_DIR/Android.mk"
 
@@ -145,12 +148,10 @@ jobs:
           cp "$PROJ4_DIR/src/proj_api.h" "$PROJ6_DIR/include/proj_api.h" 2>/dev/null || true
 
           # ----- ODKRYWAMY PLIK Z DEF. DLA JSON-C (NULL i SIZE_T) -----
-          # Kompilator zatnie się na pliku JSON-c bo nie wczytuje standardowej biblioteki stddef.h 
-          # Pomożemy mu dopisując dyrektywę o włączaniu tego wymaganego podstawowego pliku.
           JSON_DIR=$(find $(pwd) -type d -name 'json-c-0.13.1' | head -n 1)
           echo "#include <stddef.h>" > "$JSON_DIR/config.h" 
 
-          # ----- RĘCZNE I BEZPIECZNE ŁADOWANIE ŚCIEŻEK -----
+          # ----- RĘCZNE I BEZPIECZNE ŁADOWANIE ŚCIEŻEK (IZOLACJA WERSJI) -----
           SQLITE_DIR=$(find $(pwd) -type d -name 'sqlite-amalgamation-3280000' | head -n 1)
           
           LIBXML_FILE=$(find $(pwd) -name 'parser.h' | grep '/libxml/' | head -n 1)
@@ -162,7 +163,7 @@ jobs:
           
           ICONV_INC=$(dirname "$(find $(pwd) -name 'iconv.h' | head -n 1)")
           
-          # CFLAGS - dołączamy naszą wstawkę include z stddef.h na wszystkie C-pliki
+          # CFLAGS
           echo "APP_CFLAGS += -include stddef.h -I$SQLITE_DIR -I$SPATIALITE_5_DIR/src/headers -I$SPATIALITE_5_DIR" >> "$JNI_DIR/Application.mk"
           echo "APP_CFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ6_DIR/include -I$PROJ6_DIR/src -I$ICONV_INC -I$JSON_DIR" >> "$JNI_DIR/Application.mk"
           
@@ -170,8 +171,9 @@ jobs:
           echo "APP_CXXFLAGS += -I$SQLITE_DIR -I$SPATIALITE_5_DIR/src/headers -I$SPATIALITE_5_DIR" >> "$JNI_DIR/Application.mk"
           echo "APP_CXXFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ6_DIR/include -I$PROJ6_DIR/src -I$ICONV_INC" >> "$JNI_DIR/Application.mk"
 
-          echo "APP_CFLAGS += -DPROJ_NEW=0 -DVERSION=\\\"5.0.0\\\" -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
-          echo "APP_CXXFLAGS += -DPROJ_NEW=0 -DVERSION=\\\"5.0.0\\\" -std=gnu++11 -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
+          # USUNIĘTE WADLIWE -DVERSION. Kompilator użyje teraz po prostu wersji z edytowanego pliku!
+          echo "APP_CFLAGS += -DPROJ_NEW=0 -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
+          echo "APP_CXXFLAGS += -DPROJ_NEW=0 -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
 
       - name: Przygotowanie Android NDK
         uses: nttld/setup-ndk@v1
