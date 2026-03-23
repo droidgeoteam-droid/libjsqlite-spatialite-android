@@ -24,9 +24,6 @@ jobs:
           echo "APP_ABI := arm64-v8a armeabi-v7a x86_64 x86" >> "$JNI_DIR/Application.mk"
           echo "APP_PLATFORM := android-21" >> "$JNI_DIR/Application.mk"
           echo "APP_ALLOW_MISSING_DEPS := true" >> "$JNI_DIR/Application.mk"
-          
-          # Cofamy C++ w czasie do standardu gnu++11 (lub c++11), który nadal obsługuje auto_ptr
-          echo "APP_CPPFLAGS += -std=gnu++11" >> "$JNI_DIR/Application.mk"
 
           chmod -R 777 .
 
@@ -147,29 +144,34 @@ jobs:
           cp "$PROJ6_DIR/src/proj.h" "$PROJ6_DIR/include/proj.h" 2>/dev/null || true
           cp "$PROJ4_DIR/src/proj_api.h" "$PROJ6_DIR/include/proj_api.h" 2>/dev/null || true
 
-          # ----- RĘCZNE I BEZPIECZNE ŁADOWANIE ŚCIEŻEK (IZOLACJA WERSJI) -----
+          # ----- ODKRYWAMY PLIK Z DEF. DLA JSON-C (NULL i SIZE_T) -----
+          # Kompilator zatnie się na pliku JSON-c bo nie wczytuje standardowej biblioteki stddef.h 
+          # Pomożemy mu dopisując dyrektywę o włączaniu tego wymaganego podstawowego pliku.
+          JSON_DIR=$(find $(pwd) -type d -name 'json-c-0.13.1' | head -n 1)
+          echo "#include <stddef.h>" > "$JSON_DIR/config.h" 
+
+          # ----- RĘCZNE I BEZPIECZNE ŁADOWANIE ŚCIEŻEK -----
           SQLITE_DIR=$(find $(pwd) -type d -name 'sqlite-amalgamation-3280000' | head -n 1)
           
           LIBXML_FILE=$(find $(pwd) -name 'parser.h' | grep '/libxml/' | head -n 1)
           LIBXML_INC=$(dirname $(dirname "$LIBXML_FILE"))
           
-          # Wybieramy konkretnie nowszą paczkę GEOS 3.7.2.
           GEOS_DIR=$(find $(pwd) -type d -name 'geos-3.7.2' | head -n 1)
           GEOS_INC="$GEOS_DIR/capi"
           GEOS_MAIN_INC="$GEOS_DIR/include"
           
           ICONV_INC=$(dirname "$(find $(pwd) -name 'iconv.h' | head -n 1)")
           
-          # CFLAGS
-          echo "APP_CFLAGS += -I$SQLITE_DIR -I$SPATIALITE_5_DIR/src/headers -I$SPATIALITE_5_DIR" >> "$JNI_DIR/Application.mk"
-          echo "APP_CFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ6_DIR/include -I$PROJ6_DIR/src -I$ICONV_INC" >> "$JNI_DIR/Application.mk"
+          # CFLAGS - dołączamy naszą wstawkę include z stddef.h na wszystkie C-pliki
+          echo "APP_CFLAGS += -include stddef.h -I$SQLITE_DIR -I$SPATIALITE_5_DIR/src/headers -I$SPATIALITE_5_DIR" >> "$JNI_DIR/Application.mk"
+          echo "APP_CFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ6_DIR/include -I$PROJ6_DIR/src -I$ICONV_INC -I$JSON_DIR" >> "$JNI_DIR/Application.mk"
           
           # CXXFLAGS
           echo "APP_CXXFLAGS += -I$SQLITE_DIR -I$SPATIALITE_5_DIR/src/headers -I$SPATIALITE_5_DIR" >> "$JNI_DIR/Application.mk"
           echo "APP_CXXFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ6_DIR/include -I$PROJ6_DIR/src -I$ICONV_INC" >> "$JNI_DIR/Application.mk"
 
-          echo "APP_CFLAGS += -DPROJ_NEW=0 -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
-          echo "APP_CXXFLAGS += -DPROJ_NEW=0 -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
+          echo "APP_CFLAGS += -DPROJ_NEW=0 -DVERSION=\\\"5.0.0\\\" -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
+          echo "APP_CXXFLAGS += -DPROJ_NEW=0 -DVERSION=\\\"5.0.0\\\" -std=gnu++11 -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
 
       - name: Przygotowanie Android NDK
         uses: nttld/setup-ndk@v1
