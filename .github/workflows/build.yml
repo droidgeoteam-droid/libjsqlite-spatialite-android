@@ -27,7 +27,7 @@ jobs:
 
           chmod -R 777 .
 
-          # ----- CHIRURGICZNE CIĘCIE Z EPSG, RASTERLITE I LZMA -----
+          # ----- CHIRURGICZNE CIĘCIE RASTERLITE2 -----
           sed -i '/librasterlite2/d' "$JNI_DIR/Android.mk"
           sed -i '/rasterlite2/d' "$JNI_DIR/Android.mk"
           sed -i '/freetype/d' "$JNI_DIR/Android.mk"
@@ -36,9 +36,6 @@ jobs:
           sed -i '/png/d' "$JNI_DIR/Android.mk"
           sed -i '/jpeg/d' "$JNI_DIR/Android.mk"
           sed -i '/webp/d' "$JNI_DIR/Android.mk"
-          
-          # NOWOŚĆ: Wycinamy LZMA z głównego pliku włączającego moduły (więc w ogóle nie zostanie ruszona kompilacją!)
-          sed -i 's/ lzma//g' "$JNI_DIR/Android.mk"
 
           sed -i '/#include.*rasterlite2/d' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           sed -i 's/void \*p_rl2_data = (void \*)rl2_alloc_private();/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
@@ -128,7 +125,6 @@ jobs:
                       with open(p, 'r') as f: txt = f.read()
                       txt = txt.replace('typedef unsigned char _Bool;', '// typedef unsigned char _Bool;')
                       with open(p, 'w') as f: f.write(txt)
-
           EOF
           
           # ----- TWORZYMY BRAKUJĄCY CONFIG.H DLA SPATIALITE 5.0.0 -----
@@ -146,7 +142,6 @@ jobs:
           #define OMIT_PROJ 1
           #define OMIT_LIBXML2 1
           #define OMIT_ICONV 0
-          #define OMIT_LZMA 1
           static void fnct_PROJ_GuessSridFromSHP() {} 
           #endif
           EOF
@@ -192,6 +187,11 @@ jobs:
           
           echo "APP_CXXFLAGS += -I$SQLITE_DIR -I$SPATIALITE_5_DIR/src/headers -I$SPATIALITE_5_DIR" >> "$JNI_DIR/Application.mk"
           echo "APP_CXXFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ6_DIR/include -I$PROJ6_DIR/src -I$ICONV_INC -I$ICONV_LIB -I$JSON_DIR" >> "$JNI_DIR/Application.mk"
+
+          # ----- NOWOŚĆ: BEZPIECZNE ŁADOWANIE ŚCIEŻEK DLA LZMA -----
+          XZ_DIR=$(find $(pwd) -type d -name 'xz-5.2.4' | head -n 1)
+          echo "APP_CFLAGS += -I$XZ_DIR/src/common -I$XZ_DIR/src/liblzma/common -I$XZ_DIR/src/liblzma/api -I$XZ_DIR/src/liblzma/check" >> "$JNI_DIR/Application.mk"
+          echo "APP_CXXFLAGS += -I$XZ_DIR/src/common -I$XZ_DIR/src/liblzma/common -I$XZ_DIR/src/liblzma/api -I$XZ_DIR/src/liblzma/check" >> "$JNI_DIR/Application.mk"
 
           echo "APP_CFLAGS += -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
           echo "APP_CXXFLAGS += -std=gnu++11 -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
