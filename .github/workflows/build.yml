@@ -43,7 +43,7 @@ jobs:
           sed -i 's/rl2_init((sqlite3 \*)h->sqlite,0);/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           sed -i 's/(const char \*)rl2_version();/"wyciety_rasterlite";/g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           
-          # Usuwamy RTTOPO
+          # Usuwamy RTTOPO z flag konfiguracyjnych
           sed -i 's/-DENABLE_RTTOPO=1//g' "$JNI_DIR/Android.mk"
           sed -i 's/-DENABLE_GCP=1//g' "$JNI_DIR/Android.mk"
 
@@ -82,9 +82,17 @@ jobs:
                       with open(p, 'w') as f: f.write('int dummy_xml_file = 0;')
                   if file == 'virtualxpath.c':
                       with open(p, 'w') as f: f.write('int dummy_virtualxpath_file = 0;')
-                  
                   if file == 'virtualtext.c':
                       with open(p, 'w') as f: f.write('int dummy_virtualtext_file = 0;')
+                  
+                  # -------------------------------------------------------------
+                  # NOWOŚĆ: Bezwzględne wycięcie localcharset.h z gg_utf8.c
+                  # Omijamy ten archaiczny plik bazy - wpisujemy kodowanie UTF-8 na sztywno
+                  # -------------------------------------------------------------
+                  if file == 'gg_utf8.c':
+                      with open(p, 'r') as f: txt = f.read()
+                      txt = txt.replace('#include <localcharset.h>', 'static inline const char *locale_charset() { return "UTF-8"; }')
+                      with open(p, 'w') as f: f.write(txt)
                   
                   if '/topology/' in p and file.endswith('.c'):
                       with open(p, 'r') as f: txt = f.read()
@@ -125,10 +133,6 @@ jobs:
                       with open(p, 'r') as f: txt = f.read()
                       txt = txt.replace('typedef unsigned char _Bool;', '// typedef unsigned char _Bool;')
                       with open(p, 'w') as f: f.write(txt)
-
-                  # CAŁKOWICIE USUŃ JAKIEKOLWIEK STARE LOCALCHARSET.H
-                  if file == 'localcharset.h':
-                      os.remove(p)
           EOF
           
           # ----- TWORZYMY BRAKUJĄCY CONFIG.H DLA SPATIALITE 5.0.0 -----
