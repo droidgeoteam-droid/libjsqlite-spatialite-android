@@ -27,7 +27,7 @@ jobs:
 
           chmod -R 777 .
 
-          # ----- CHIRURGICZNE CIĘCIE RASTERLITE2 -----
+          # ----- CHIRURGICZNE CIĘCIE Z EPSG, RASTERLITE I LZMA -----
           sed -i '/librasterlite2/d' "$JNI_DIR/Android.mk"
           sed -i '/rasterlite2/d' "$JNI_DIR/Android.mk"
           sed -i '/freetype/d' "$JNI_DIR/Android.mk"
@@ -36,6 +36,9 @@ jobs:
           sed -i '/png/d' "$JNI_DIR/Android.mk"
           sed -i '/jpeg/d' "$JNI_DIR/Android.mk"
           sed -i '/webp/d' "$JNI_DIR/Android.mk"
+          
+          # NOWOŚĆ: Wycinamy LZMA z głównego pliku włączającego moduły (więc w ogóle nie zostanie ruszona kompilacją!)
+          sed -i 's/ lzma//g' "$JNI_DIR/Android.mk"
 
           sed -i '/#include.*rasterlite2/d' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           sed -i 's/void \*p_rl2_data = (void \*)rl2_alloc_private();/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
@@ -43,7 +46,7 @@ jobs:
           sed -i 's/rl2_init((sqlite3 \*)h->sqlite,0);/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           sed -i 's/(const char \*)rl2_version();/"wyciety_rasterlite";/g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           
-          # Usuwamy RTTOPO z flag konfiguracyjnych
+          # Usuwamy RTTOPO
           sed -i 's/-DENABLE_RTTOPO=1//g' "$JNI_DIR/Android.mk"
           sed -i 's/-DENABLE_GCP=1//g' "$JNI_DIR/Android.mk"
 
@@ -82,17 +85,9 @@ jobs:
                       with open(p, 'w') as f: f.write('int dummy_xml_file = 0;')
                   if file == 'virtualxpath.c':
                       with open(p, 'w') as f: f.write('int dummy_virtualxpath_file = 0;')
+                  
                   if file == 'virtualtext.c':
                       with open(p, 'w') as f: f.write('int dummy_virtualtext_file = 0;')
-                  
-                  # NOWOŚĆ: BEZPIECZNE wstrzyknięcie localcharset.h ze strażnikiem
-                  if 'libspatialite' in p and p.endswith('.c'):
-                      with open(p, 'r') as f: txt = f.read()
-                      txt = txt.replace('#include <localcharset.h>', '')
-                      if 'MY_LOCALE_CHARSET_H' not in txt:
-                          guard = '#ifndef MY_LOCALE_CHARSET_H\n#define MY_LOCALE_CHARSET_H\nstatic inline const char *locale_charset() { return "UTF-8"; }\n#endif\n'
-                          txt = guard + txt
-                      with open(p, 'w') as f: f.write(txt)
                   
                   if '/topology/' in p and file.endswith('.c'):
                       with open(p, 'r') as f: txt = f.read()
@@ -133,6 +128,7 @@ jobs:
                       with open(p, 'r') as f: txt = f.read()
                       txt = txt.replace('typedef unsigned char _Bool;', '// typedef unsigned char _Bool;')
                       with open(p, 'w') as f: f.write(txt)
+
           EOF
           
           # ----- TWORZYMY BRAKUJĄCY CONFIG.H DLA SPATIALITE 5.0.0 -----
@@ -150,6 +146,7 @@ jobs:
           #define OMIT_PROJ 1
           #define OMIT_LIBXML2 1
           #define OMIT_ICONV 0
+          #define OMIT_LZMA 1
           static void fnct_PROJ_GuessSridFromSHP() {} 
           #endif
           EOF
@@ -195,12 +192,6 @@ jobs:
           
           echo "APP_CXXFLAGS += -I$SQLITE_DIR -I$SPATIALITE_5_DIR/src/headers -I$SPATIALITE_5_DIR" >> "$JNI_DIR/Application.mk"
           echo "APP_CXXFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ6_DIR/include -I$PROJ6_DIR/src -I$ICONV_INC -I$ICONV_LIB -I$JSON_DIR" >> "$JNI_DIR/Application.mk"
-
-          XZ_DIR=$(find $(pwd) -type d -name 'xz-5.2.4' | head -n 1)
-          find "$XZ_DIR/src" -type d | while read -r d; do
-              echo "APP_CFLAGS += -I$d" >> "$JNI_DIR/Application.mk"
-              echo "APP_CXXFLAGS += -I$d" >> "$JNI_DIR/Application.mk"
-          done
 
           echo "APP_CFLAGS += -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
           echo "APP_CXXFLAGS += -std=gnu++11 -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
