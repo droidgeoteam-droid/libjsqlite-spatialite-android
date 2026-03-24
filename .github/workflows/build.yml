@@ -47,6 +47,11 @@ jobs:
           sed -i 's/-DENABLE_RTTOPO=1//g' "$JNI_DIR/Android.mk"
           sed -i 's/-DENABLE_GCP=1//g' "$JNI_DIR/Android.mk"
 
+          # ----- OSTATECZNE USUWANIE SZTUCZNYCH NAGŁÓWKÓW Z POPRZEDNICH KROKÓW -----
+          # Tutaj leżał błąd! NDK uzywalo cache'owanego pliku localcharset, ktory zrobilismy na poczatku i ktory tu zostal
+          find . -name "localcharset.h" -type f -delete
+          find . -name "dummy_*" -type f -delete
+
           # ----- NALOT DYWANOWY W PYTHONIE -----
           python3 << 'EOF'
           import os, re
@@ -85,6 +90,12 @@ jobs:
                   
                   if file == 'virtualtext.c':
                       with open(p, 'w') as f: f.write('int dummy_virtualtext_file = 0;')
+                      
+                  # Wytnijmy rowniez to feralne wywolanie starej biblioteki, skoro i tak ja usuwamy
+                  if file == 'gg_utf8.c':
+                      with open(p, 'r') as f: txt = f.read()
+                      txt = txt.replace('#include <localcharset.h>', '')
+                      with open(p, 'w') as f: f.write(txt)
                   
                   if '/topology/' in p and file.endswith('.c'):
                       with open(p, 'r') as f: txt = f.read()
@@ -149,13 +160,6 @@ jobs:
           touch "$SPATIALITE_5_DIR/librttopo.h"
           touch "$SPATIALITE_5_DIR/librttopo_geom.h"
 
-          cat <<EOF > "$SPATIALITE_5_DIR/localcharset.h"
-          #ifndef LOCALCHARSET_H
-          #define LOCALCHARSET_H
-          static inline const char *locale_charset() { return "UTF-8"; }
-          #endif
-          EOF
-
           # ----- WSTRZYKNIĘCIE ZMIENNYCH DO STRUKTURY -----
           PRIV_HEADER=$(find "$SPATIALITE_5_DIR" -name "spatialite_private.h" | head -n 1)
           python3 -c "
@@ -189,15 +193,17 @@ jobs:
           ICONV_INC="$ICONV_DIR/include"
           ICONV_LIB="$ICONV_DIR/libcharset/include"
           
-          XZ_DIR=$(find $(pwd) -type d -name 'xz-5.2.4' | head -n 1)
-          XZ_INC1="$XZ_DIR/src/common"
-          XZ_INC2="$XZ_DIR/src/liblzma/common"
-          
           echo "APP_CFLAGS += -include stddef.h -include stdarg.h -include fcntl.h -I$SQLITE_DIR -I$SPATIALITE_5_DIR/src/headers -I$SPATIALITE_5_DIR" >> "$JNI_DIR/Application.mk"
-          echo "APP_CFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ6_DIR/include -I$PROJ6_DIR/src -I$ICONV_INC -I$ICONV_LIB -I$JSON_DIR -I$XZ_INC1 -I$XZ_INC2" >> "$JNI_DIR/Application.mk"
+          echo "APP_CFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ6_DIR/include -I$PROJ6_DIR/src -I$ICONV_INC -I$ICONV_LIB -I$JSON_DIR" >> "$JNI_DIR/Application.mk"
           
           echo "APP_CXXFLAGS += -I$SQLITE_DIR -I$SPATIALITE_5_DIR/src/headers -I$SPATIALITE_5_DIR" >> "$JNI_DIR/Application.mk"
-          echo "APP_CXXFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ6_DIR/include -I$PROJ6_DIR/src -I$ICONV_INC -I$ICONV_LIB -I$JSON_DIR -I$XZ_INC1 -I$XZ_INC2" >> "$JNI_DIR/Application.mk"
+          echo "APP_CXXFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ6_DIR/include -I$PROJ6_DIR/src -I$ICONV_INC -I$ICONV_LIB -I$JSON_DIR" >> "$JNI_DIR/Application.mk"
+
+          XZ_DIR=$(find $(pwd) -type d -name 'xz-5.2.4' | head -n 1)
+          find "$XZ_DIR/src" -type d | while read -r d; do
+              echo "APP_CFLAGS += -I$d" >> "$JNI_DIR/Application.mk"
+              echo "APP_CXXFLAGS += -I$d" >> "$JNI_DIR/Application.mk"
+          done
 
           echo "APP_CFLAGS += -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
           echo "APP_CXXFLAGS += -std=gnu++11 -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
