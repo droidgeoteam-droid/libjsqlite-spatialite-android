@@ -27,7 +27,7 @@ jobs:
 
           chmod -R 777 .
 
-          # ----- CHIRURGICZNE CIĘCIE RASTERLITE2 -----
+          # ----- CHIRURGICZNE CIĘCIE RASTERLITE2 I LZMA -----
           sed -i '/librasterlite2/d' "$JNI_DIR/Android.mk"
           sed -i '/rasterlite2/d' "$JNI_DIR/Android.mk"
           sed -i '/freetype/d' "$JNI_DIR/Android.mk"
@@ -46,6 +46,16 @@ jobs:
           # Usuwamy RTTOPO
           sed -i 's/-DENABLE_RTTOPO=1//g' "$JNI_DIR/Android.mk"
           sed -i 's/-DENABLE_GCP=1//g' "$JNI_DIR/Android.mk"
+
+          # -------------------------------------------------------------
+          # NOWOŚĆ: DOSŁOWNE USUNIĘCIE MODUŁU LZMA Z KOMPILACJI NDK
+          # Ponieważ NDK czyta osobny plik Android.mk z folderu xz-5.2.4, 
+          # my go po prostu skasujemy. Bez pliku .mk NDK w ogóle go nie zobaczy!
+          # -------------------------------------------------------------
+          find . -type f -name "Android.mk" | grep "/xz-" | xargs rm -f
+          # I żeby główny Android.mk nie płakał o brak pliku - podmieniamy wywołanie na pustkę
+          sed -i 's/$(call import-module,xz-[^)]*)//g' "$JNI_DIR/Android.mk"
+          sed -i 's/ lzma//g' "$JNI_DIR/Android.mk"
 
           # ----- NALOT DYWANOWY W PYTHONIE -----
           python3 << 'EOF'
@@ -120,11 +130,6 @@ jobs:
                       
                   if 'librttopo' in p and p.endswith('.c'):
                       with open(p, 'w') as f: f.write('int dummy_rttopo_file = 0;')
-
-                  if file == 'sysdefs.h':
-                      with open(p, 'r') as f: txt = f.read()
-                      txt = txt.replace('typedef unsigned char _Bool;', '// typedef unsigned char _Bool;')
-                      with open(p, 'w') as f: f.write(txt)
           EOF
           
           # ----- TWORZYMY BRAKUJĄCY CONFIG.H DLA SPATIALITE 5.0.0 -----
@@ -142,12 +147,20 @@ jobs:
           #define OMIT_PROJ 1
           #define OMIT_LIBXML2 1
           #define OMIT_ICONV 0
+          #define OMIT_LZMA 1
           static void fnct_PROJ_GuessSridFromSHP() {} 
           #endif
           EOF
           
           touch "$SPATIALITE_5_DIR/librttopo.h"
           touch "$SPATIALITE_5_DIR/librttopo_geom.h"
+
+          cat <<EOF > "$SPATIALITE_5_DIR/localcharset.h"
+          #ifndef LOCALCHARSET_H
+          #define LOCALCHARSET_H
+          static inline const char *locale_charset() { return "UTF-8"; }
+          #endif
+          EOF
 
           # ----- WSTRZYKNIĘCIE ZMIENNYCH DO STRUKTURY -----
           PRIV_HEADER=$(find "$SPATIALITE_5_DIR" -name "spatialite_private.h" | head -n 1)
@@ -187,11 +200,6 @@ jobs:
           
           echo "APP_CXXFLAGS += -I$SQLITE_DIR -I$SPATIALITE_5_DIR/src/headers -I$SPATIALITE_5_DIR" >> "$JNI_DIR/Application.mk"
           echo "APP_CXXFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ6_DIR/include -I$PROJ6_DIR/src -I$ICONV_INC -I$ICONV_LIB -I$JSON_DIR" >> "$JNI_DIR/Application.mk"
-
-          # ----- NOWOŚĆ: BEZPIECZNE ŁADOWANIE ŚCIEŻEK DLA LZMA -----
-          XZ_DIR=$(find $(pwd) -type d -name 'xz-5.2.4' | head -n 1)
-          echo "APP_CFLAGS += -I$XZ_DIR/src/common -I$XZ_DIR/src/liblzma/common -I$XZ_DIR/src/liblzma/api -I$XZ_DIR/src/liblzma/check" >> "$JNI_DIR/Application.mk"
-          echo "APP_CXXFLAGS += -I$XZ_DIR/src/common -I$XZ_DIR/src/liblzma/common -I$XZ_DIR/src/liblzma/api -I$XZ_DIR/src/liblzma/check" >> "$JNI_DIR/Application.mk"
 
           echo "APP_CFLAGS += -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
           echo "APP_CXXFLAGS += -std=gnu++11 -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
