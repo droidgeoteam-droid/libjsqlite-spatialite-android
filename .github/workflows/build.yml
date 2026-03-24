@@ -27,7 +27,7 @@ jobs:
 
           chmod -R 777 .
 
-          # ----- CHIRURGICZNE CIĘCIE RASTERLITE2 -----
+          # ----- CHIRURGICZNE CIĘCIE RASTERLITE2 I LZMA -----
           sed -i '/librasterlite2/d' "$JNI_DIR/Android.mk"
           sed -i '/rasterlite2/d' "$JNI_DIR/Android.mk"
           sed -i '/freetype/d' "$JNI_DIR/Android.mk"
@@ -36,6 +36,9 @@ jobs:
           sed -i '/png/d' "$JNI_DIR/Android.mk"
           sed -i '/jpeg/d' "$JNI_DIR/Android.mk"
           sed -i '/webp/d' "$JNI_DIR/Android.mk"
+          
+          # Usuwamy stąd LZMA, aby kompilator nie budował modułu kompresora XZ
+          sed -i '/lzma/d' "$JNI_DIR/Android.mk"
 
           sed -i '/#include.*rasterlite2/d' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           sed -i 's/void \*p_rl2_data = (void \*)rl2_alloc_private();/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
@@ -120,11 +123,6 @@ jobs:
                       
                   if 'librttopo' in p and p.endswith('.c'):
                       with open(p, 'w') as f: f.write('int dummy_rttopo_file = 0;')
-
-                  if file == 'sysdefs.h':
-                      with open(p, 'r') as f: txt = f.read()
-                      txt = txt.replace('typedef unsigned char _Bool;', '// typedef unsigned char _Bool;')
-                      with open(p, 'w') as f: f.write(txt)
           EOF
           
           # ----- TWORZYMY BRAKUJĄCY CONFIG.H DLA SPATIALITE 5.0.0 -----
@@ -142,12 +140,20 @@ jobs:
           #define OMIT_PROJ 1
           #define OMIT_LIBXML2 1
           #define OMIT_ICONV 0
+          #define OMIT_LZMA 1
           static void fnct_PROJ_GuessSridFromSHP() {} 
           #endif
           EOF
           
           touch "$SPATIALITE_5_DIR/librttopo.h"
           touch "$SPATIALITE_5_DIR/librttopo_geom.h"
+
+          cat <<EOF > "$SPATIALITE_5_DIR/localcharset.h"
+          #ifndef LOCALCHARSET_H
+          #define LOCALCHARSET_H
+          static inline const char *locale_charset() { return "UTF-8"; }
+          #endif
+          EOF
 
           # ----- WSTRZYKNIĘCIE ZMIENNYCH DO STRUKTURY -----
           PRIV_HEADER=$(find "$SPATIALITE_5_DIR" -name "spatialite_private.h" | head -n 1)
@@ -181,21 +187,12 @@ jobs:
           ICONV_DIR=$(find $(pwd) -type d -name 'libiconv-1.16' | head -n 1)
           ICONV_INC="$ICONV_DIR/include"
           ICONV_LIB="$ICONV_DIR/libcharset/include"
-
-          # CFLAGS - dołączamy naszą wstawkę z stddef.h i dodajemy dynamicznie folder LZMA
+          
           echo "APP_CFLAGS += -include stddef.h -include stdarg.h -include fcntl.h -I$SQLITE_DIR -I$SPATIALITE_5_DIR/src/headers -I$SPATIALITE_5_DIR" >> "$JNI_DIR/Application.mk"
           echo "APP_CFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ6_DIR/include -I$PROJ6_DIR/src -I$ICONV_INC -I$ICONV_LIB -I$JSON_DIR" >> "$JNI_DIR/Application.mk"
           
-          # CXXFLAGS
           echo "APP_CXXFLAGS += -I$SQLITE_DIR -I$SPATIALITE_5_DIR/src/headers -I$SPATIALITE_5_DIR" >> "$JNI_DIR/Application.mk"
           echo "APP_CXXFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ6_DIR/include -I$PROJ6_DIR/src -I$ICONV_INC -I$ICONV_LIB -I$JSON_DIR" >> "$JNI_DIR/Application.mk"
-
-          # NOWOŚĆ: Znajdujemy wszystkie podfoldery xz-5.2.4 zawierające nagłówki i dodajemy je do CFLAGS
-          XZ_DIR=$(find $(pwd) -type d -name 'xz-5.2.4' | head -n 1)
-          find "$XZ_DIR/src" -type d | while read -r d; do
-              echo "APP_CFLAGS += -I$d" >> "$JNI_DIR/Application.mk"
-              echo "APP_CXXFLAGS += -I$d" >> "$JNI_DIR/Application.mk"
-          done
 
           echo "APP_CFLAGS += -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
           echo "APP_CXXFLAGS += -std=gnu++11 -Wno-error -fpermissive" >> "$JNI_DIR/Application.mk"
