@@ -43,7 +43,7 @@ jobs:
           sed -i 's/rl2_init((sqlite3 \*)h->sqlite,0);/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           sed -i 's/(const char \*)rl2_version();/"wyciety_rasterlite";/g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           
-          # Usuwamy RTTOPO z flag konfiguracyjnych
+          # Usuwamy RTTOPO
           sed -i 's/-DENABLE_RTTOPO=1//g' "$JNI_DIR/Android.mk"
           sed -i 's/-DENABLE_GCP=1//g' "$JNI_DIR/Android.mk"
 
@@ -120,6 +120,12 @@ jobs:
                       
                   if 'librttopo' in p and p.endswith('.c'):
                       with open(p, 'w') as f: f.write('int dummy_rttopo_file = 0;')
+
+                  # NOWOŚĆ: Naprawa redundatnego starego makra bool w LZMA
+                  if file == 'sysdefs.h':
+                      with open(p, 'r') as f: txt = f.read()
+                      txt = txt.replace('typedef unsigned char _Bool;', '// typedef unsigned char _Bool;')
+                      with open(p, 'w') as f: f.write(txt)
           EOF
           
           # ----- TWORZYMY BRAKUJĄCY CONFIG.H DLA SPATIALITE 5.0.0 -----
@@ -143,8 +149,6 @@ jobs:
           
           touch "$SPATIALITE_5_DIR/librttopo.h"
           touch "$SPATIALITE_5_DIR/librttopo_geom.h"
-          
-          # [USUNĘLIŚMY STĄD FAKE LOCALCHARSET, ZEBY ICONV ZADZIAŁAŁ!]
 
           # ----- WSTRZYKNIĘCIE ZMIENNYCH DO STRUKTURY -----
           PRIV_HEADER=$(find "$SPATIALITE_5_DIR" -name "spatialite_private.h" | head -n 1)
@@ -175,7 +179,6 @@ jobs:
           GEOS_INC="$GEOS_DIR/capi"
           GEOS_MAIN_INC="$GEOS_DIR/include"
           
-          # Podpinamy główną ścieżkę do iconv
           ICONV_DIR=$(find $(pwd) -type d -name 'libiconv-1.16' | head -n 1)
           ICONV_INC="$ICONV_DIR/include"
           ICONV_LIB="$ICONV_DIR/libcharset/include"
