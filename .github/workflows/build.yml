@@ -82,17 +82,16 @@ jobs:
                       with open(p, 'w') as f: f.write('int dummy_xml_file = 0;')
                   if file == 'virtualxpath.c':
                       with open(p, 'w') as f: f.write('int dummy_virtualxpath_file = 0;')
-                  
                   if file == 'virtualtext.c':
                       with open(p, 'w') as f: f.write('int dummy_virtualtext_file = 0;')
-                      
-                  # NOWOŚĆ: Bezwzględne wycięcie localcharset z każdego istniejącego pliku C w Spatialite
+                  
+                  # NOWOŚĆ: BEZPIECZNE wstrzyknięcie localcharset.h ze strażnikiem
                   if 'libspatialite' in p and p.endswith('.c'):
                       with open(p, 'r') as f: txt = f.read()
                       txt = txt.replace('#include <localcharset.h>', '')
-                      # I od razu wrzucamy łatkę dla zepsutych funkcji (żeby pominąć to ostrzeżenie w innych krokach)
-                      if 'locale_charset' not in txt:
-                          txt = 'static inline const char *locale_charset() { return "UTF-8"; }\n' + txt
+                      if 'MY_LOCALE_CHARSET_H' not in txt:
+                          guard = '#ifndef MY_LOCALE_CHARSET_H\n#define MY_LOCALE_CHARSET_H\nstatic inline const char *locale_charset() { return "UTF-8"; }\n#endif\n'
+                          txt = guard + txt
                       with open(p, 'w') as f: f.write(txt)
                   
                   if '/topology/' in p and file.endswith('.c'):
@@ -134,9 +133,6 @@ jobs:
                       with open(p, 'r') as f: txt = f.read()
                       txt = txt.replace('typedef unsigned char _Bool;', '// typedef unsigned char _Bool;')
                       with open(p, 'w') as f: f.write(txt)
-
-                  if file == 'localcharset.h':
-                      os.remove(p)
           EOF
           
           # ----- TWORZYMY BRAKUJĄCY CONFIG.H DLA SPATIALITE 5.0.0 -----
