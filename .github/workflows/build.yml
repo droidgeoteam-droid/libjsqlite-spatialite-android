@@ -17,6 +17,7 @@ jobs:
           PROJECT_DIR=$(dirname "$JNI_DIR")
           
           echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
+          export JNI_DIR="$JNI_DIR"
           
           # Konfiguracja 16KB i architektur (Wymóg Android 15+ / SDK 35)
           echo "APP_LDFLAGS += -Wl,-z,max-page-size=16384" >> "$JNI_DIR/Application.mk"
@@ -26,34 +27,47 @@ jobs:
 
           chmod -R 777 .
 
-          # ----- CHIRURGICZNE CIĘCIE RASTERLITE2 I INNYCH -----
-          sed -i 's/librasterlite2//g' "$JNI_DIR/Android.mk"
-          sed -i 's/rasterlite2//g' "$JNI_DIR/Android.mk"
-          sed -i 's/freetype//g' "$JNI_DIR/Android.mk"
-          sed -i 's/tiff//g' "$JNI_DIR/Android.mk"
-          sed -i 's/gif//g' "$JNI_DIR/Android.mk"
-          sed -i 's/png//g' "$JNI_DIR/Android.mk"
-          sed -i 's/jpeg//g' "$JNI_DIR/Android.mk"
-          sed -i 's/webp//g' "$JNI_DIR/Android.mk"
-
+          # ----- CHIRURGICZNE CIĘCIE KODU C DLA RASTERLITE -----
           sed -i '/#include.*rasterlite2/d' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           sed -i 's/void \*p_rl2_data = (void \*)rl2_alloc_private();/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           sed -i 's/rl2_init((sqlite3 \*)h->sqlite,p_rl2_data,0);/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           sed -i 's/rl2_init((sqlite3 \*)h->sqlite,0);/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           sed -i 's/(const char \*)rl2_version();/"wyciety_rasterlite";/g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
-          
-          # Usuwamy RTTOPO z flag
-          sed -i 's/-DENABLE_RTTOPO=1//g' "$JNI_DIR/Android.mk"
-          sed -i 's/-DENABLE_GCP=1//g' "$JNI_DIR/Android.mk"
 
-          # DOSŁOWNE USUNIĘCIE MODUŁU LZMA
+          # DOSŁOWNE USUNIĘCIE MODUŁU LZMA (fizyczne pliki)
           find . -type f -name "Android.mk" | grep "/xz-" | xargs rm -f
-          sed -i 's/$(call import-module,xz-[^)]*)//g' "$JNI_DIR/Android.mk"
-          sed -i 's/ lzma//g' "$JNI_DIR/Android.mk"
 
-          # ----- NALOT DYWANOWY W PYTHONIE -----
+          # ----- BEZPIECZNE MODYFIKOWANIE PLIKÓW W PYTHONIE -----
           python3 << 'EOF'
           import os, re
+          jni_dir = os.environ['JNI_DIR']
+          
+          # 1. NAPRAWA ANDROID.MK - INTELIGENTNE USUWANIE
+          mk_path = os.path.join(jni_dir, 'Android.mk')
+          if os.path.exists(mk_path):
+              with open(mk_path, 'r') as f:
+                  lines = f.readlines()
+              with open(mk_path, 'w') as f:
+                  for line in lines:
+                      # Pomiń wczytywanie plików makefile dla odciętych bibliotek
+                      if 'include ' in line and any(x in line for x in ['rasterlite2', 'freetype', 'tiff', 'gif', 'png', 'jpeg', 'webp', 'xz-', 'lzma']):
+                          continue
+                      
+                      # Usunięcie flag RTTOPO
+                      line = line.replace('-DENABLE_RTTOPO=1', '')
+                      line = line.replace('-DENABLE_GCP=1', '')
+                      
+                      # Bezpieczne usunięcie słów kluczowych z zależności (dopasowuje TYLKO całe słowa)
+                      if 'LOCAL_STATIC_LIBRARIES' in line or 'LOCAL_SHARED_LIBRARIES' in line:
+                          for lib in ['rasterlite2', 'librasterlite2', 'freetype', 'tiff', 'gif', 'png', 'jpeg', 'webp', 'lzma', 'libpng', 'libjpeg', 'libtiff', 'libgif', 'libwebp']:
+                              line = re.sub(r'(?<!\w)' + lib + r'(?!\w)', '', line)
+                              
+                      # Zneutralizowanie ewentualnych makr import-module z xz
+                      line = re.sub(r'\$\(call import-module,xz-[^\)]*\)', '', line)
+                      
+                      f.write(line)
+
+          # 2. NALOT DYWANOWY NA KOD ŹRÓDŁOWY SPATIALITE
           for root, dirs, files in os.walk('.'):
               for file in files:
                   p = os.path.join(root, file)
