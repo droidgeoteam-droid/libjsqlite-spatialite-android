@@ -28,7 +28,7 @@ jobs:
           chmod -R 777 .
 
           # ----- USUWANIE PRZESTARZAŁEGO LINKERA GOLD -----
-          # Android NDK r23+ nie ma linkera gold/bfd. Wymuszamy domyślny lld.
+          # Android NDK r23+ nie ma linkera gold/bfd. Wymuszamy nowoczesny lld.
           find . -name "*.mk" -type f -exec sed -i 's/-fuse-ld=gold//g' {} +
           find . -name "*.mk" -type f -exec sed -i 's/-fuse-ld=bfd//g' {} +
 
@@ -39,7 +39,7 @@ jobs:
           sed -i 's/rl2_init((sqlite3 \*)h->sqlite,0);/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           sed -i 's/(const char \*)rl2_version();/"wyciety_rasterlite";/g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
 
-          # DOSŁOWNE USUNIĘCIE MODUŁU LZMA (fizyczne pliki)
+          # DOSŁOWNE USUNIĘCIE MODUŁU LZMA
           find . -type f -name "Android.mk" | grep "/xz-" | xargs rm -f
 
           # ----- BEZPIECZNE MODYFIKOWANIE PLIKÓW W PYTHONIE -----
@@ -47,43 +47,32 @@ jobs:
           import os, re
           jni_dir = os.environ['JNI_DIR']
           
-          # 1. NAPRAWA ANDROID.MK - INTELIGENTNE USUWANIE
+          # 1. Inteligentne usuwanie wyciętych bibliotek z Android.mk
           mk_path = os.path.join(jni_dir, 'Android.mk')
           if os.path.exists(mk_path):
               with open(mk_path, 'r') as f:
                   lines = f.readlines()
               with open(mk_path, 'w') as f:
                   for line in lines:
-                      # Pomiń wczytywanie plików makefile dla odciętych bibliotek (RasterLite, Obrazki, LZMA)
                       if 'include ' in line and any(x in line for x in ['rasterlite2', 'freetype', 'tiff', 'gif', 'png', 'jpeg', 'webp', 'xz-', 'lzma']):
                           continue
-                      
-                      # Bezpieczne usunięcie słów kluczowych z zależności (dopasowuje TYLKO całe słowa)
                       if 'LOCAL_STATIC_LIBRARIES' in line or 'LOCAL_SHARED_LIBRARIES' in line:
                           for lib in ['rasterlite2', 'librasterlite2', 'freetype', 'tiff', 'gif', 'png', 'jpeg', 'webp', 'lzma', 'libpng', 'libjpeg', 'libtiff', 'libgif', 'libwebp']:
                               line = re.sub(r'(?<!\w)' + lib + r'(?!\w)', '', line)
-                              
-                      # Zneutralizowanie ewentualnych makr import-module z xz
                       line = re.sub(r'\$\(call import-module,xz-[^\)]*\)', '', line)
-                      
                       f.write(line)
 
-          # 2. BEZPIECZNE POPRAWKI W KODZIE ŹRÓDŁOWYM SPATIALITE
+          # 2. Naprawy kompatybilności pod Androida
           for root, dirs, files in os.walk('.'):
               for file in files:
                   p = os.path.join(root, file)
                   
-                  if file == 'gg_transform.c':
-                      with open(p, 'r') as f: txt = f.read()
-                      if '#define PJ projPJ' not in txt:
-                          txt = '#define PJ projPJ\n#define PJ_CONTEXT void\n#define PJ_FWD 1\n#define proj_trans_generic(a,b,c,d,e,f,g,h,i,j,k,l,m,n) 0\n' + txt
-                          with open(p, 'w') as f: f.write(txt)
-                          
+                  # Słaby symbol (weak symbol) zabezpiecza przed brakiem modułu HTTP w obciętym libxml2
                   if file == 'wfs_in.c':
                       with open(p, 'a') as f:
-                          # "weak symbol" - jeśli funkcja jest w libxml2 to zostanie użyta, jeśli jej brak, wpadnie tutaj bez rzucania błędem
                           f.write('\n#ifdef __cplusplus\nextern "C" {\n#endif\n__attribute__((weak)) void xmlNanoHTTPCleanup(void) {}\n#ifdef __cplusplus\n}\n#endif\n')
 
+                  # Obejścia brakujących skryptów configure
                   if file == 'xmlversion.h.in':
                       with open(p, 'r') as f: txt = f.read()
                       txt = re.sub(r'@[A-Z0-9_]*@', '0', txt)
@@ -111,7 +100,8 @@ jobs:
                       with open(p, 'w') as f: f.write(txt)
           EOF
           
-          # ----- TWORZYMY CZYSTY CONFIG.H (BEZ WYCINANIA PROJ I LIBXML2) -----
+          # ----- TWORZYMY CZYSTY CONFIG.H -----
+          # Pozwalamy kompilatorowi swobodnie łączyć PROJ, RTTOPO i XML2
           SPATIALITE_5_DIR=$(find $(pwd) -type d -name 'libspatialite-5.0.0' | head -n 1)
           cat <<EOF > "$SPATIALITE_5_DIR/config.h"
           #ifndef CONFIG_H
@@ -126,13 +116,8 @@ jobs:
           #endif
           EOF
           
-          # ----- WSTRZYKNIĘCIE ZMIENNYCH DO STRUKTURY -----
-          PRIV_HEADER=$(find "$SPATIALITE_5_DIR" -name "spatialite_private.h" | head -n 1)
-          python3 -c "
-          with open('$PRIV_HEADER', 'r') as f: content = f.read()
-          content = content.replace('void *auth_context;', 'void *auth_context;\n    char* gaia_geos_error_msg;\n    char* gaia_geos_warning_msg;\n    char* gaia_rttopo_error_msg;\n    char* gaia_rttopo_warning_msg;\n    int silent_mode;')
-          with open('$PRIV_HEADER', 'w') as f: f.write(content)
-          "
+          touch "$SPATIALITE_5_DIR/librttopo.h"
+          touch "$SPATIALITE_5_DIR/librttopo_geom.h"
 
           # ----- NAPRAWA BŁĘDU PROJ -----
           PROJ6_DIR=$(find $(pwd) -type d -name 'proj-6.1.1' | head -n 1)
@@ -159,11 +144,9 @@ jobs:
           ICONV_INC="$ICONV_DIR/include"
           ICONV_LIB="$ICONV_DIR/libcharset/include"
           
-          # Dodanie prawidłowych nagłówków RTTOPO (zamiast głuchych plików)
           RTTOPO_HDR=$(find $(pwd) -name "librttopo.h" | head -n 1)
           if [ -n "$RTTOPO_HDR" ]; then RTTOPO_INC="-I$(dirname "$RTTOPO_HDR")"; else RTTOPO_INC=""; fi
           
-          # Dodajemy Wyciszenie Warningów żeby logi z NDK były czytelniejsze
           SILENCE_WARNINGS="-Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-error -Wno-macro-redefined -fpermissive"
           SILENCE_CXX_WARNINGS="-std=gnu++11 -Wno-error -Wno-deprecated-declarations -fpermissive"
 
