@@ -78,7 +78,7 @@ jobs:
                       with open(p, 'a') as f:
                           f.write('\n#ifdef __cplusplus\nextern "C" {\n#endif\n__attribute__((weak)) void xmlNanoHTTPCleanup(void) {}\n#ifdef __cplusplus\n}\n#endif\n')
 
-                  # POPRAWA KONFIGURACJI LIBXML2 - WŁĄCZAMY OBSŁUGĘ XPATH I SCHEMAS
+                  # POPRAWA KONFIGURACJI LIBXML2 - Włączamy poprawną obsługę funkcji sieciowych
                   if file == 'xmlversion.h.in':
                       with open(p, 'r') as f: txt = f.read()
                       txt = txt.replace('@WITH_ZLIB@', '0')
@@ -88,6 +88,18 @@ jobs:
                       txt = txt.replace('@WITH_RUN_DEBUG@', '0')
                       txt = re.sub(r'@WITH_[A-Z0-9_]*@', '1', txt)
                       txt = re.sub(r'@[A-Z0-9_]*@', '0', txt)
+                      
+                      # Deklaracje sieciowe Androida dla nanoftp.c i nanohttp.c
+                      txt += '\n#define HAVE_SYS_SOCKET_H 1'
+                      txt += '\n#define HAVE_NETINET_IN_H 1'
+                      txt += '\n#define HAVE_ARPA_INET_H 1'
+                      txt += '\n#define HAVE_NETDB_H 1'
+                      txt += '\n#define HAVE_UNISTD_H 1'
+                      txt += '\n#define HAVE_FCNTL_H 1'
+                      txt += '\n#define SEND_ARG2_CAST (const void *)'
+                      txt += '\n#define GETHOSTBYNAME_ARG_CAST (const char *)'
+                      txt += '\n'
+                      
                       target = os.path.join(root, 'xmlversion.h')
                       with open(target, 'w') as f: f.write(txt)
 
