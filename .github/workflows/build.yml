@@ -150,27 +150,27 @@ jobs:
           "
 
           # ----- NAPRAWA BŁĘDU PROJ -----
-          PROJ6_DIR=$(find $(pwd) -type d -name 'proj-6.1.1' | head -n 1)
-          PROJ4_DIR=$(find $(pwd) -type d -name 'proj-4.9.1' | head -n 1)
+          PROJ6_DIR=$(find $(pwd) -type d -name 'proj-6.1.1' | sort -V | tail -n 1)
+          PROJ4_DIR=$(find $(pwd) -type d -name 'proj-4.9.1' | sort -V | tail -n 1)
 
           cp "$PROJ6_DIR/src/proj.h" "$PROJ6_DIR/include/proj.h" 2>/dev/null || true
           cp "$PROJ4_DIR/src/proj_api.h" "$PROJ6_DIR/include/proj_api.h" 2>/dev/null || true
 
-          JSON_DIR=$(find $(pwd) -type d -name 'json-c-0.13.1' | head -n 1)
+          JSON_DIR=$(find $(pwd) -type d -name 'json-c-*' | sort -V | tail -n 1)
           echo "#include <stddef.h>" > "$JSON_DIR/config.h" 
           echo "#include <fcntl.h>" >> "$JSON_DIR/config.h"
 
-          # ----- RĘCZNE I BEZPIECZNE ŁADOWANIE ŚCIEŻEK -----
-          SQLITE_DIR=$(find $(pwd) -type d -name 'sqlite-amalgamation-3280000' | head -n 1)
+          # ----- RĘCZNE I BEZPIECZNE ŁADOWANIE ŚCIEŻEK (ZAWSZE NAJNOWSZE WERSJE) -----
+          SQLITE_DIR=$(find $(pwd) -type d -name 'sqlite-amalgamation-*' | sort -V | tail -n 1)
           
-          LIBXML_FILE=$(find $(pwd) -name 'parser.h' | grep '/libxml/' | head -n 1)
-          LIBXML_INC=$(dirname $(dirname "$LIBXML_FILE"))
+          LIBXML_DIR=$(find $(pwd) -type d -name 'libxml2-*' | sort -V | tail -n 1)
+          LIBXML_INC="$LIBXML_DIR/include"
           
-          GEOS_DIR=$(find $(pwd) -type d -name 'geos-3.7.2' | head -n 1)
+          GEOS_DIR=$(find $(pwd) -type d -name 'geos-*' | sort -V | tail -n 1)
           GEOS_INC="$GEOS_DIR/capi"
           GEOS_MAIN_INC="$GEOS_DIR/include"
           
-          ICONV_DIR=$(find $(pwd) -type d -name 'libiconv-1.16' | head -n 1)
+          ICONV_DIR=$(find $(pwd) -type d -name 'libiconv-*' | sort -V | tail -n 1)
           ICONV_INC="$ICONV_DIR/include"
           ICONV_LIB="$ICONV_DIR/libcharset/include"
           
