@@ -28,7 +28,7 @@ jobs:
           chmod -R 777 .
 
           # ----- USUWANIE PRZESTARZAŁEGO LINKERA GOLD -----
-          # NDK r23+ usunęło linkery gold i bfd. Wymuszamy domyślny lld.
+          # Android NDK r23+ nie ma linkera gold/bfd. Wymuszamy domyślny lld.
           find . -name "*.mk" -type f -exec sed -i 's/-fuse-ld=gold//g' {} +
           find . -name "*.mk" -type f -exec sed -i 's/-fuse-ld=bfd//g' {} +
 
@@ -54,13 +54,9 @@ jobs:
                   lines = f.readlines()
               with open(mk_path, 'w') as f:
                   for line in lines:
-                      # Pomiń wczytywanie plików makefile dla odciętych bibliotek
+                      # Pomiń wczytywanie plików makefile dla odciętych bibliotek (RasterLite, Obrazki, LZMA)
                       if 'include ' in line and any(x in line for x in ['rasterlite2', 'freetype', 'tiff', 'gif', 'png', 'jpeg', 'webp', 'xz-', 'lzma']):
                           continue
-                      
-                      # Usunięcie flag RTTOPO
-                      line = line.replace('-DENABLE_RTTOPO=1', '')
-                      line = line.replace('-DENABLE_GCP=1', '')
                       
                       # Bezpieczne usunięcie słów kluczowych z zależności (dopasowuje TYLKO całe słowa)
                       if 'LOCAL_STATIC_LIBRARIES' in line or 'LOCAL_SHARED_LIBRARIES' in line:
@@ -72,47 +68,21 @@ jobs:
                       
                       f.write(line)
 
-          # 2. NALOT DYWANOWY NA KOD ŹRÓDŁOWY SPATIALITE
+          # 2. BEZPIECZNE POPRAWKI W KODZIE ŹRÓDŁOWYM SPATIALITE
           for root, dirs, files in os.walk('.'):
               for file in files:
                   p = os.path.join(root, file)
                   
-                  if file == 'alloc_cache.c':
-                      with open(p, 'r') as f: txt = f.read()
-                      if 'static char* dummy_ptr;' not in txt:
-                          txt = 'static char* dummy_ptr = 0; static int dummy_int = 0;\n' + txt
-                      txt = txt.replace('cache->gaia_geos_error_msg', 'dummy_ptr')
-                      txt = txt.replace('cache->gaia_geos_warning_msg', 'dummy_ptr')
-                      txt = txt.replace('cache->gaia_rttopo_error_msg', 'dummy_ptr')
-                      txt = txt.replace('cache->gaia_rttopo_warning_msg', 'dummy_ptr')
-                      txt = txt.replace('cache->silent_mode', 'dummy_int')
-                      txt = txt.replace('free (dummy_ptr);', '')
-                      txt = txt.replace('strcpy (dummy_ptr, msg);', '')
-                      with open(p, 'w') as f: f.write(txt)
-                      
-                  if file == 'gg_rttopo.c':
-                      with open(p, 'r') as f: txt = f.read()
-                      if '#ifndef OMIT_RTTOPO' not in txt:
-                          txt = '#include <config.h>\n#ifndef OMIT_RTTOPO\n' + txt + '\n#endif\n'
-                      with open(p, 'w') as f: f.write(txt)
-                      
                   if file == 'gg_transform.c':
                       with open(p, 'r') as f: txt = f.read()
-                      txt = '#define PJ projPJ\n#define PJ_CONTEXT void\n#define PJ_FWD 1\n#define proj_trans_generic(a,b,c,d,e,f,g,h,i,j,k,l,m,n) 0\n' + txt
-                      with open(p, 'w') as f: f.write(txt)
-                  
-                  if file == 'gg_xml.c':
-                      with open(p, 'w') as f: f.write('int dummy_xml_file = 0;')
-                  if file == 'virtualxpath.c':
-                      with open(p, 'w') as f: f.write('int dummy_virtualxpath_file = 0;')
-                  if file == 'virtualtext.c':
-                      with open(p, 'w') as f: f.write('int dummy_virtualtext_file = 0;')
-                  
-                  if '/topology/' in p and file.endswith('.c'):
-                      with open(p, 'r') as f: txt = f.read()
-                      if '#ifndef OMIT_RTTOPO' not in txt:
-                          txt = '#include <config.h>\n#ifndef OMIT_RTTOPO\n' + txt + '\n#endif\n'
-                      with open(p, 'w') as f: f.write(txt)
+                      if '#define PJ projPJ' not in txt:
+                          txt = '#define PJ projPJ\n#define PJ_CONTEXT void\n#define PJ_FWD 1\n#define proj_trans_generic(a,b,c,d,e,f,g,h,i,j,k,l,m,n) 0\n' + txt
+                          with open(p, 'w') as f: f.write(txt)
+                          
+                  if file == 'wfs_in.c':
+                      with open(p, 'a') as f:
+                          # "weak symbol" - jeśli funkcja jest w libxml2 to zostanie użyta, jeśli jej brak, wpadnie tutaj bez rzucania błędem
+                          f.write('\n#ifdef __cplusplus\nextern "C" {\n#endif\n__attribute__((weak)) void xmlNanoHTTPCleanup(void) {}\n#ifdef __cplusplus\n}\n#endif\n')
 
                   if file == 'xmlversion.h.in':
                       with open(p, 'r') as f: txt = f.read()
@@ -139,12 +109,9 @@ jobs:
                       txt = txt.replace('#include "vasprintf_compat.h"', '// zneutralizowane vasprintf_compat')
                       txt = txt.replace('#include "snprintf_compat.h"', '// zneutralizowane snprintf_compat')
                       with open(p, 'w') as f: f.write(txt)
-                      
-                  if 'librttopo' in p and p.endswith('.c'):
-                      with open(p, 'w') as f: f.write('int dummy_rttopo_file = 0;')
           EOF
           
-          # ----- TWORZYMY BRAKUJĄCY CONFIG.H DLA SPATIALITE 5.0.0 -----
+          # ----- TWORZYMY CZYSTY CONFIG.H (BEZ WYCINANIA PROJ I LIBXML2) -----
           SPATIALITE_5_DIR=$(find $(pwd) -type d -name 'libspatialite-5.0.0' | head -n 1)
           cat <<EOF > "$SPATIALITE_5_DIR/config.h"
           #ifndef CONFIG_H
@@ -155,18 +122,10 @@ jobs:
           #define HAVE_INTTYPES_H 1
           #define HAVE_STDINT_H 1
           #define HAVE_UNISTD_H 1
-          #define OMIT_RTTOPO 1
-          #define OMIT_PROJ 1
-          #define OMIT_LIBXML2 1
-          #define OMIT_ICONV 0
           #define OMIT_LZMA 1
-          static void fnct_PROJ_GuessSridFromSHP() {} 
           #endif
           EOF
           
-          touch "$SPATIALITE_5_DIR/librttopo.h"
-          touch "$SPATIALITE_5_DIR/librttopo_geom.h"
-
           # ----- WSTRZYKNIĘCIE ZMIENNYCH DO STRUKTURY -----
           PRIV_HEADER=$(find "$SPATIALITE_5_DIR" -name "spatialite_private.h" | head -n 1)
           python3 -c "
@@ -200,16 +159,20 @@ jobs:
           ICONV_INC="$ICONV_DIR/include"
           ICONV_LIB="$ICONV_DIR/libcharset/include"
           
+          # Dodanie prawidłowych nagłówków RTTOPO (zamiast głuchych plików)
+          RTTOPO_HDR=$(find $(pwd) -name "librttopo.h" | head -n 1)
+          if [ -n "$RTTOPO_HDR" ]; then RTTOPO_INC="-I$(dirname "$RTTOPO_HDR")"; else RTTOPO_INC=""; fi
+          
           # Dodajemy Wyciszenie Warningów żeby logi z NDK były czytelniejsze
           SILENCE_WARNINGS="-Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-error -Wno-macro-redefined -fpermissive"
           SILENCE_CXX_WARNINGS="-std=gnu++11 -Wno-error -Wno-deprecated-declarations -fpermissive"
 
           echo "APP_CFLAGS += -include stddef.h -include stdarg.h -include fcntl.h -I$SQLITE_DIR -I$SPATIALITE_5_DIR/src/headers -I$SPATIALITE_5_DIR" >> "$JNI_DIR/Application.mk"
-          echo "APP_CFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ6_DIR/include -I$PROJ6_DIR/src -I$ICONV_INC -I$ICONV_LIB -I$JSON_DIR" >> "$JNI_DIR/Application.mk"
+          echo "APP_CFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ6_DIR/include -I$PROJ6_DIR/src -I$ICONV_INC -I$ICONV_LIB -I$JSON_DIR $RTTOPO_INC" >> "$JNI_DIR/Application.mk"
           echo "APP_CFLAGS += $SILENCE_WARNINGS" >> "$JNI_DIR/Application.mk"
           
           echo "APP_CXXFLAGS += -I$SQLITE_DIR -I$SPATIALITE_5_DIR/src/headers -I$SPATIALITE_5_DIR" >> "$JNI_DIR/Application.mk"
-          echo "APP_CXXFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ6_DIR/include -I$PROJ6_DIR/src -I$ICONV_INC -I$ICONV_LIB -I$JSON_DIR" >> "$JNI_DIR/Application.mk"
+          echo "APP_CXXFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ6_DIR/include -I$PROJ6_DIR/src -I$ICONV_INC -I$ICONV_LIB -I$JSON_DIR $RTTOPO_INC" >> "$JNI_DIR/Application.mk"
           echo "APP_CXXFLAGS += $SILENCE_CXX_WARNINGS" >> "$JNI_DIR/Application.mk"
 
       - name: Przygotowanie Android NDK
