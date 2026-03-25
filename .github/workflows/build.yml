@@ -78,7 +78,7 @@ jobs:
                       with open(p, 'a') as f:
                           f.write('\n#ifdef __cplusplus\nextern "C" {\n#endif\n__attribute__((weak)) void xmlNanoHTTPCleanup(void) {}\n#ifdef __cplusplus\n}\n#endif\n')
 
-                  # POPRAWA KONFIGURACJI LIBXML2 - Włączamy poprawną obsługę funkcji sieciowych
+                  # POPRAWA KONFIGURACJI LIBXML2
                   if file == 'xmlversion.h.in':
                       with open(p, 'r') as f: txt = f.read()
                       txt = txt.replace('@WITH_ZLIB@', '0')
@@ -86,6 +86,8 @@ jobs:
                       txt = txt.replace('@WITH_ICU@', '0')
                       txt = txt.replace('@WITH_MEM_DEBUG@', '0')
                       txt = txt.replace('@WITH_RUN_DEBUG@', '0')
+                      txt = txt.replace('@WITH_TRIO@', '0') # WYŁĄCZAMY PRZESTARZAŁY MODUŁ TRIO!
+                      
                       txt = re.sub(r'@WITH_[A-Z0-9_]*@', '1', txt)
                       txt = re.sub(r'@[A-Z0-9_]*@', '0', txt)
                       
@@ -175,7 +177,6 @@ jobs:
           RTTOPO_HDR=$(find $(pwd) -name "librttopo.h" | head -n 1)
           if [ -n "$RTTOPO_HDR" ]; then RTTOPO_INC="-I$(dirname "$RTTOPO_HDR")"; else RTTOPO_INC=""; fi
           
-          # TUTAJ DODAŁEM -DICONV_CONST=const ABY LIBXML2 NIE PŁAKAŁO O BRAK MAKRA
           SILENCE_WARNINGS="-DICONV_CONST=const -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-error -Wno-macro-redefined -fpermissive"
           SILENCE_CXX_WARNINGS="-DICONV_CONST=const -std=gnu++11 -Wno-error -Wno-deprecated-declarations -fpermissive"
 
