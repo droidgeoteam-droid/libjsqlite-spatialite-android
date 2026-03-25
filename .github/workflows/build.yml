@@ -67,7 +67,7 @@ jobs:
               for file in files:
                   p = os.path.join(root, file)
                   
-                  # Słaby symbol (weak symbol) zabezpiecza przed brakiem modułu HTTP w obciętym libxml2
+                  # Słaby symbol (weak symbol) zabezpiecza przed brakiem modułu HTTP w libxml2
                   if file == 'wfs_in.c':
                       with open(p, 'a') as f:
                           f.write('\n#ifdef __cplusplus\nextern "C" {\n#endif\n__attribute__((weak)) void xmlNanoHTTPCleanup(void) {}\n#ifdef __cplusplus\n}\n#endif\n')
@@ -116,8 +116,13 @@ jobs:
           #endif
           EOF
           
-          touch "$SPATIALITE_5_DIR/librttopo.h"
-          touch "$SPATIALITE_5_DIR/librttopo_geom.h"
+          # ----- WSTRZYKNIĘCIE ZMIENNYCH DO STRUKTURY -----
+          PRIV_HEADER=$(find "$SPATIALITE_5_DIR" -name "spatialite_private.h" | head -n 1)
+          python3 -c "
+          with open('$PRIV_HEADER', 'r') as f: content = f.read()
+          content = content.replace('void *auth_context;', 'void *auth_context;\n    char* gaia_geos_error_msg;\n    char* gaia_geos_warning_msg;\n    char* gaia_rttopo_error_msg;\n    char* gaia_rttopo_warning_msg;\n    int silent_mode;')
+          with open('$PRIV_HEADER', 'w') as f: f.write(content)
+          "
 
           # ----- NAPRAWA BŁĘDU PROJ -----
           PROJ6_DIR=$(find $(pwd) -type d -name 'proj-6.1.1' | head -n 1)
@@ -144,6 +149,7 @@ jobs:
           ICONV_INC="$ICONV_DIR/include"
           ICONV_LIB="$ICONV_DIR/libcharset/include"
           
+          # Odszukanie PRAWIDŁOWEGO, oryginalnego nagłówka RTTOPO
           RTTOPO_HDR=$(find $(pwd) -name "librttopo.h" | head -n 1)
           if [ -n "$RTTOPO_HDR" ]; then RTTOPO_INC="-I$(dirname "$RTTOPO_HDR")"; else RTTOPO_INC=""; fi
           
