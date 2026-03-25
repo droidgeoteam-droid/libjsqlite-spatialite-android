@@ -66,6 +66,13 @@ jobs:
               for file in files:
                   p = os.path.join(root, file)
                   
+                  # Poprawa błędu składni #include <lwn_network.h> na "lwn_network.h" w folderze topology
+                  if 'topology' in root and file.endswith('.c'):
+                      with open(p, 'r') as f: txt = f.read()
+                      if '<lwn_network.h>' in txt:
+                          txt = txt.replace('<lwn_network.h>', '"lwn_network.h"')
+                          with open(p, 'w') as f: f.write(txt)
+
                   # Słaby symbol (weak symbol) zabezpiecza przed brakiem modułu HTTP w libxml2
                   if file == 'wfs_in.c':
                       with open(p, 'a') as f:
@@ -74,15 +81,12 @@ jobs:
                   # POPRAWA KONFIGURACJI LIBXML2 - WŁĄCZAMY OBSŁUGĘ XPATH I SCHEMAS
                   if file == 'xmlversion.h.in':
                       with open(p, 'r') as f: txt = f.read()
-                      # Bezpieczne wyłączenie obcych zależności
                       txt = txt.replace('@WITH_ZLIB@', '0')
                       txt = txt.replace('@WITH_LZMA@', '0')
                       txt = txt.replace('@WITH_ICU@', '0')
                       txt = txt.replace('@WITH_MEM_DEBUG@', '0')
                       txt = txt.replace('@WITH_RUN_DEBUG@', '0')
-                      # Włączenie pozostałych wbudowanych funkcji libxml2 (np. WITH_XPATH, WITH_SCHEMAS)
                       txt = re.sub(r'@WITH_[A-Z0-9_]*@', '1', txt)
-                      # Wyzerowanie reszty makr
                       txt = re.sub(r'@[A-Z0-9_]*@', '0', txt)
                       target = os.path.join(root, 'xmlversion.h')
                       with open(target, 'w') as f: f.write(txt)
