@@ -1,4 +1,15 @@
-- name: Znajdz foldery i zastosuj ostateczna naprawe naglowkow
+name: Zbuduj Android 16KB
+
+on: [push, workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pobieranie kodu
+        uses: actions/checkout@v4
+
+      - name: Znajdz foldery i zastosuj ostateczna naprawe naglowkow
         run: |
           MAIN_ANDROID_MK=$(find . -name "Android.mk" | awk '{ print length($0), $0 }' | sort -n | cut -d ' ' -f2- | head -n 1)
           
@@ -15,7 +26,7 @@
 
           chmod -R 777 .
 
-          # ----- CHIRURGICZNE CIĘCIE RASTERLITE2 I INNYCH (BEZ USUWANIA CAŁYCH LINII) -----
+          # ----- CHIRURGICZNE CIĘCIE RASTERLITE2 I INNYCH -----
           sed -i 's/librasterlite2//g' "$JNI_DIR/Android.mk"
           sed -i 's/rasterlite2//g' "$JNI_DIR/Android.mk"
           sed -i 's/freetype//g' "$JNI_DIR/Android.mk"
@@ -137,8 +148,6 @@
           touch "$SPATIALITE_5_DIR/librttopo.h"
           touch "$SPATIALITE_5_DIR/librttopo_geom.h"
 
-          # UWAGA: Usunięto generowanie pliku localcharset.h, ponieważ kłócił się z libiconv.
-
           # ----- WSTRZYKNIĘCIE ZMIENNYCH DO STRUKTURY -----
           PRIV_HEADER=$(find "$SPATIALITE_5_DIR" -name "spatialite_private.h" | head -n 1)
           python3 -c "
@@ -183,3 +192,18 @@
           echo "APP_CXXFLAGS += -I$SQLITE_DIR -I$SPATIALITE_5_DIR/src/headers -I$SPATIALITE_5_DIR" >> "$JNI_DIR/Application.mk"
           echo "APP_CXXFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ6_DIR/include -I$PROJ6_DIR/src -I$ICONV_INC -I$ICONV_LIB -I$JSON_DIR" >> "$JNI_DIR/Application.mk"
           echo "APP_CXXFLAGS += $SILENCE_CXX_WARNINGS" >> "$JNI_DIR/Application.mk"
+
+      - name: Przygotowanie Android NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r27c
+
+      - name: Kompilacja biblioteki
+        run: $ANDROID_NDK_HOME/ndk-build -C ${{ env.PROJECT_DIR }} APP_ALLOW_MISSING_DEPS=true
+
+      - name: Zapisywanie gotowych plików
+        uses: actions/upload-artifact@v4
+        with:
+          name: gotowe-biblioteki-16kb
+          path: ${{ env.PROJECT_DIR }}/libs/
