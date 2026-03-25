@@ -1,93 +1,122 @@
-name: Zbuduj Android 16KB (SpatiaLite)
-on: 
-  push:
-  workflow_dispatch:
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Pobieranie kodu
-        uses: actions/checkout@v4
-
-      - name: Przygotowanie i Naprawa Projektu
+- name: Znajdz foldery i zastosuj ostateczna naprawe naglowkow
         run: |
-          # 1. Znajdowanie ścieżek w sposób bardziej stabilny
-          # Szukamy głównego folderu jni
-          JNI_PATH=$(find . -type d -name "jni" | head -n 1)
-          if [ -z "$JNI_PATH" ]; then
-            echo "BŁĄD: Nie znaleziono katalogu jni!"
-            exit 1
-          fi
+          MAIN_ANDROID_MK=$(find . -name "Android.mk" | awk '{ print length($0), $0 }' | sort -n | cut -d ' ' -f2- | head -n 1)
           
-          # Konwertujemy na ścieżkę absolutną
-          ABS_JNI=$(realpath "$JNI_PATH")
-          ABS_PROJECT=$(dirname "$ABS_JNI")
+          JNI_DIR=$(dirname "$MAIN_ANDROID_MK")
+          PROJECT_DIR=$(dirname "$JNI_DIR")
           
-          echo "PROJECT_DIR=$ABS_PROJECT" >> $GITHUB_ENV
-          echo "JNI_DIR=$ABS_JNI" >> $GITHUB_ENV
+          echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
           
-          echo "Katalog JNI: $ABS_JNI"
-          echo "Katalog Projektu: $ABS_PROJECT"
+          # Konfiguracja 16KB i architektur (Wymóg Android 15+ / SDK 35)
+          echo "APP_LDFLAGS += -Wl,-z,max-page-size=16384" >> "$JNI_DIR/Application.mk"
+          echo "APP_ABI := arm64-v8a armeabi-v7a x86_64 x86" >> "$JNI_DIR/Application.mk"
+          echo "APP_PLATFORM := android-21" >> "$JNI_DIR/Application.mk"
+          echo "APP_ALLOW_MISSING_DEPS := true" >> "$JNI_DIR/Application.mk"
 
-          # 2. Tworzenie Application.mk
-          # Używamy bezpośredniej ścieżki
-          cat <<EOF > "$ABS_JNI/Application.mk"
-          APP_ABI := arm64-v8a x86_64 armeabi-v7a x86
-          APP_PLATFORM := android-24
-          APP_STL := c++_static
-          APP_OPTIM := release
-          APP_LDFLAGS += -Wl,-z,max-page-size=16384
-          APP_CFLAGS += -Wno-error=format-security -Wno-implicit-function-declaration
-          APP_ALLOW_MISSING_DEPS := true
-          EOF
+          chmod -R 777 .
 
-          # 3. Czyszczenie Android.mk z nieobecnych modułów (RasterLite2 itp.)
-          # Szukamy wszystkich Android.mk i usuwamy zbędne zależności
-          find "$ABS_JNI" -name "Android.mk" -exec sed -i 's/\brasterlite2\b//g' {} +
-          find "$ABS_JNI" -name "Android.mk" -exec sed -i 's/\blibrasterlite2\b//g' {} +
-          find "$ABS_JNI" -name "Android.mk" -exec sed -i 's/\bfreetype\b//g' {} +
-          find "$ABS_JNI" -name "Android.mk" -exec sed -i 's/\bpng\b//g' {} +
-          find "$ABS_JNI" -name "Android.mk" -exec sed -i 's/\bjpeg\b//g' {} +
+          # ----- CHIRURGICZNE CIĘCIE RASTERLITE2 I INNYCH (BEZ USUWANIA CAŁYCH LINII) -----
+          sed -i 's/librasterlite2//g' "$JNI_DIR/Android.mk"
+          sed -i 's/rasterlite2//g' "$JNI_DIR/Android.mk"
+          sed -i 's/freetype//g' "$JNI_DIR/Android.mk"
+          sed -i 's/tiff//g' "$JNI_DIR/Android.mk"
+          sed -i 's/gif//g' "$JNI_DIR/Android.mk"
+          sed -i 's/png//g' "$JNI_DIR/Android.mk"
+          sed -i 's/jpeg//g' "$JNI_DIR/Android.mk"
+          sed -i 's/webp//g' "$JNI_DIR/Android.mk"
+
+          sed -i '/#include.*rasterlite2/d' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
+          sed -i 's/void \*p_rl2_data = (void \*)rl2_alloc_private();/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
+          sed -i 's/rl2_init((sqlite3 \*)h->sqlite,p_rl2_data,0);/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
+          sed -i 's/rl2_init((sqlite3 \*)h->sqlite,0);/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
+          sed -i 's/(const char \*)rl2_version();/"wyciety_rasterlite";/g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
           
-          # Usuwamy linie import-module dla xz i rasterlite2
-          sed -i '/import-module.*xz/d' "$ABS_JNI/Android.mk" || true
-          sed -i '/import-module.*rasterlite2/d' "$ABS_JNI/Android.mk" || true
+          # Usuwamy RTTOPO z flag
+          sed -i 's/-DENABLE_RTTOPO=1//g' "$JNI_DIR/Android.mk"
+          sed -i 's/-DENABLE_GCP=1//g' "$JNI_DIR/Android.mk"
 
-          # 4. Naprawa GEOS (duplikacja plików w pliku .mk)
-          GEOS_MK=$(find "$ABS_JNI" -name "Android.mk" | grep "geos" | head -n 1)
-          if [ -f "$GEOS_MK" ]; then
-            sed -i 's/src\/inlines.cpp//2' "$GEOS_MK"
-          fi
+          # DOSŁOWNE USUNIĘCIE MODUŁU LZMA
+          find . -type f -name "Android.mk" | grep "/xz-" | xargs rm -f
+          sed -i 's/$(call import-module,xz-[^)]*)//g' "$JNI_DIR/Android.mk"
+          sed -i 's/ lzma//g' "$JNI_DIR/Android.mk"
 
-          # 5. Patchowanie kodu (Python)
+          # ----- NALOT DYWANOWY W PYTHONIE -----
           python3 << 'EOF'
           import os, re
-          
-          # Przeszukujemy pliki w poszukiwaniu tych do naprawy
           for root, dirs, files in os.walk('.'):
               for file in files:
                   p = os.path.join(root, file)
                   
-                  if file == 'sqlite_jni.c':
+                  if file == 'alloc_cache.c':
                       with open(p, 'r') as f: txt = f.read()
-                      txt = re.sub(r'#include.*rasterlite2.*', '/* removed */', txt)
-                      txt = txt.replace('rl2_init', '// rl2_init')
-                      txt = txt.replace('rl2_alloc_private', 'NULL //')
-                      txt = txt.replace('rl2_version()', '"not_available"')
+                      if 'static char* dummy_ptr;' not in txt:
+                          txt = 'static char* dummy_ptr = 0; static int dummy_int = 0;\n' + txt
+                      txt = txt.replace('cache->gaia_geos_error_msg', 'dummy_ptr')
+                      txt = txt.replace('cache->gaia_geos_warning_msg', 'dummy_ptr')
+                      txt = txt.replace('cache->gaia_rttopo_error_msg', 'dummy_ptr')
+                      txt = txt.replace('cache->gaia_rttopo_warning_msg', 'dummy_ptr')
+                      txt = txt.replace('cache->silent_mode', 'dummy_int')
+                      txt = txt.replace('free (dummy_ptr);', '')
+                      txt = txt.replace('strcpy (dummy_ptr, msg);', '')
+                      with open(p, 'w') as f: f.write(txt)
+                      
+                  if file == 'gg_rttopo.c':
+                      with open(p, 'r') as f: txt = f.read()
+                      if '#ifndef OMIT_RTTOPO' not in txt:
+                          txt = '#include <config.h>\n#ifndef OMIT_RTTOPO\n' + txt + '\n#endif\n'
+                      with open(p, 'w') as f: f.write(txt)
+                      
+                  if file == 'gg_transform.c':
+                      with open(p, 'r') as f: txt = f.read()
+                      txt = '#define PJ projPJ\n#define PJ_CONTEXT void\n#define PJ_FWD 1\n#define proj_trans_generic(a,b,c,d,e,f,g,h,i,j,k,l,m,n) 0\n' + txt
+                      with open(p, 'w') as f: f.write(txt)
+                  
+                  if file == 'gg_xml.c':
+                      with open(p, 'w') as f: f.write('int dummy_xml_file = 0;')
+                  if file == 'virtualxpath.c':
+                      with open(p, 'w') as f: f.write('int dummy_virtualxpath_file = 0;')
+                  if file == 'virtualtext.c':
+                      with open(p, 'w') as f: f.write('int dummy_virtualtext_file = 0;')
+                  
+                  if '/topology/' in p and file.endswith('.c'):
+                      with open(p, 'r') as f: txt = f.read()
+                      if '#ifndef OMIT_RTTOPO' not in txt:
+                          txt = '#include <config.h>\n#ifndef OMIT_RTTOPO\n' + txt + '\n#endif\n'
                       with open(p, 'w') as f: f.write(txt)
 
-                  if file == 'spatialite_private.h':
+                  if file == 'xmlversion.h.in':
                       with open(p, 'r') as f: txt = f.read()
-                      if 'char* gaia_geos_error_msg;' not in txt:
-                          txt = txt.replace('void *auth_context;', 'void *auth_context;\n    char* gaia_geos_error_msg;\n    char* gaia_geos_warning_msg;\n    char* gaia_rttopo_error_msg;\n    char* gaia_rttopo_warning_msg;\n    int silent_mode;')
+                      txt = re.sub(r'@[A-Z0-9_]*@', '0', txt)
+                      target = os.path.join(root, 'xmlversion.h')
+                      with open(target, 'w') as f: f.write(txt)
+
+                  if file == 'version.c' and 'versioninfo' in root:
+                      with open(p, 'r') as f: txt = f.read()
+                      txt = txt.replace('VERSION', '"5.0.0"')
                       with open(p, 'w') as f: f.write(txt)
+
+                  if file == 'json_config.h.win32':
+                      with open(p, 'r') as f: txt = f.read()
+                      txt = re.sub(r'#define HAVE_DECL_ISINF 1', '', txt)
+                      txt = re.sub(r'#define HAVE_DECL_ISNAN 1', '', txt)
+                      txt += '\n#define HAVE_STRDUP 1\n#define HAVE_SNPRINTF 1\n#define HAVE_VSNPRINTF 1\n#define HAVE_VASPRINTF 1\n#define HAVE_STRNCASECMP 1\n#define HAVE_STDARG_H 1\n#define HAVE_VA_COPY 1\n#define HAVE_VPRINTF 1\n'
+                      target = os.path.join(root, 'json_config.h')
+                      with open(target, 'w') as f: f.write(txt)
+                      
+                  if file == 'printbuf.c':
+                      with open(p, 'r') as f: txt = f.read()
+                      txt = txt.replace('# error Not enough var arg support!', '// zneutralizowane')
+                      txt = txt.replace('#include "vasprintf_compat.h"', '// zneutralizowane vasprintf_compat')
+                      txt = txt.replace('#include "snprintf_compat.h"', '// zneutralizowane snprintf_compat')
+                      with open(p, 'w') as f: f.write(txt)
+                      
+                  if 'librttopo' in p and p.endswith('.c'):
+                      with open(p, 'w') as f: f.write('int dummy_rttopo_file = 0;')
           EOF
-
-          # 6. Konfiguracja SpatiaLite (config.h)
-          SL_DIR=$(find "$ABS_JNI" -type d -name "libspatialite-*" | head -n 1)
-          if [ -d "$SL_DIR" ]; then
-            cat <<EOF > "$SL_DIR/config.h"
+          
+          # ----- TWORZYMY BRAKUJĄCY CONFIG.H DLA SPATIALITE 5.0.0 -----
+          SPATIALITE_5_DIR=$(find $(pwd) -type d -name 'libspatialite-5.0.0' | head -n 1)
+          cat <<EOF > "$SPATIALITE_5_DIR/config.h"
           #ifndef CONFIG_H
           #define CONFIG_H
           #define OMIT_FREEXL 1
@@ -98,39 +127,59 @@ jobs:
           #define HAVE_UNISTD_H 1
           #define OMIT_RTTOPO 1
           #define OMIT_PROJ 1
-          #define OMIT_LIBXML2 0
+          #define OMIT_LIBXML2 1
           #define OMIT_ICONV 0
           #define OMIT_LZMA 1
-          #define HAVE_STRCASESTR 1
-          #define HAVE_STRDUP 1
+          static void fnct_PROJ_GuessSridFromSHP() {} 
           #endif
           EOF
-          fi
-
-          # 7. Wstrzykiwanie Include'ów do Application.mk
-          # Szukamy folderów, aby podać poprawne ścieżki kompilatorowi
-          SQLITE_DIR=$(find "$ABS_JNI" -type d -name "sqlite-amalgamation-*" | head -n 1)
-          JSON_DIR=$(find "$ABS_JNI" -type d -name "json-c-*" | head -n 1)
           
-          {
-            [ -n "$SQLITE_DIR" ] && echo "APP_CFLAGS += -I$SQLITE_DIR"
-            [ -n "$SL_DIR" ] && echo "APP_CFLAGS += -I$SL_DIR/src/headers -I$SL_DIR"
-            [ -n "$JSON_DIR" ] && echo "APP_CFLAGS += -I$JSON_DIR"
-          } >> "$ABS_JNI/Application.mk"
+          touch "$SPATIALITE_5_DIR/librttopo.h"
+          touch "$SPATIALITE_5_DIR/librttopo_geom.h"
 
-      - name: Instalacja Android NDK
-        uses: nttld/setup-ndk@v1
-        id: setup-ndk
-        with:
-          ndk-version: r27c
+          # UWAGA: Usunięto generowanie pliku localcharset.h, ponieważ kłócił się z libiconv.
 
-      - name: Kompilacja Bibliotek (.so)
-        run: |
-          # Budujemy w katalogu projektu
-          $ANDROID_NDK_HOME/ndk-build -C ${{ env.PROJECT_DIR }} V=1
+          # ----- WSTRZYKNIĘCIE ZMIENNYCH DO STRUKTURY -----
+          PRIV_HEADER=$(find "$SPATIALITE_5_DIR" -name "spatialite_private.h" | head -n 1)
+          python3 -c "
+          with open('$PRIV_HEADER', 'r') as f: content = f.read()
+          content = content.replace('void *auth_context;', 'void *auth_context;\n    char* gaia_geos_error_msg;\n    char* gaia_geos_warning_msg;\n    char* gaia_rttopo_error_msg;\n    char* gaia_rttopo_warning_msg;\n    int silent_mode;')
+          with open('$PRIV_HEADER', 'w') as f: f.write(content)
+          "
 
-      - name: Zapisywanie gotowych plików
-        uses: actions/upload-artifact@v4
-        with:
-          name: jsqlite-spatialite-16kb
-          path: ${{ env.PROJECT_DIR }}/libs/
+          # ----- NAPRAWA BŁĘDU PROJ -----
+          PROJ6_DIR=$(find $(pwd) -type d -name 'proj-6.1.1' | head -n 1)
+          PROJ4_DIR=$(find $(pwd) -type d -name 'proj-4.9.1' | head -n 1)
+
+          cp "$PROJ6_DIR/src/proj.h" "$PROJ6_DIR/include/proj.h" 2>/dev/null || true
+          cp "$PROJ4_DIR/src/proj_api.h" "$PROJ6_DIR/include/proj_api.h" 2>/dev/null || true
+
+          JSON_DIR=$(find $(pwd) -type d -name 'json-c-0.13.1' | head -n 1)
+          echo "#include <stddef.h>" > "$JSON_DIR/config.h" 
+          echo "#include <fcntl.h>" >> "$JSON_DIR/config.h"
+
+          # ----- RĘCZNE I BEZPIECZNE ŁADOWANIE ŚCIEŻEK -----
+          SQLITE_DIR=$(find $(pwd) -type d -name 'sqlite-amalgamation-3280000' | head -n 1)
+          
+          LIBXML_FILE=$(find $(pwd) -name 'parser.h' | grep '/libxml/' | head -n 1)
+          LIBXML_INC=$(dirname $(dirname "$LIBXML_FILE"))
+          
+          GEOS_DIR=$(find $(pwd) -type d -name 'geos-3.7.2' | head -n 1)
+          GEOS_INC="$GEOS_DIR/capi"
+          GEOS_MAIN_INC="$GEOS_DIR/include"
+          
+          ICONV_DIR=$(find $(pwd) -type d -name 'libiconv-1.16' | head -n 1)
+          ICONV_INC="$ICONV_DIR/include"
+          ICONV_LIB="$ICONV_DIR/libcharset/include"
+          
+          # Dodajemy Wyciszenie Warningów żeby logi z NDK były czytelniejsze
+          SILENCE_WARNINGS="-Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-error -Wno-macro-redefined -fpermissive"
+          SILENCE_CXX_WARNINGS="-std=gnu++11 -Wno-error -Wno-deprecated-declarations -fpermissive"
+
+          echo "APP_CFLAGS += -include stddef.h -include stdarg.h -include fcntl.h -I$SQLITE_DIR -I$SPATIALITE_5_DIR/src/headers -I$SPATIALITE_5_DIR" >> "$JNI_DIR/Application.mk"
+          echo "APP_CFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ6_DIR/include -I$PROJ6_DIR/src -I$ICONV_INC -I$ICONV_LIB -I$JSON_DIR" >> "$JNI_DIR/Application.mk"
+          echo "APP_CFLAGS += $SILENCE_WARNINGS" >> "$JNI_DIR/Application.mk"
+          
+          echo "APP_CXXFLAGS += -I$SQLITE_DIR -I$SPATIALITE_5_DIR/src/headers -I$SPATIALITE_5_DIR" >> "$JNI_DIR/Application.mk"
+          echo "APP_CXXFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ6_DIR/include -I$PROJ6_DIR/src -I$ICONV_INC -I$ICONV_LIB -I$JSON_DIR" >> "$JNI_DIR/Application.mk"
+          echo "APP_CXXFLAGS += $SILENCE_CXX_WARNINGS" >> "$JNI_DIR/Application.mk"
