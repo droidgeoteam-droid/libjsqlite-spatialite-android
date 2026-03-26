@@ -177,8 +177,9 @@ jobs:
           RTTOPO_HDR=$(find $(pwd) -name "librttopo.h" | head -n 1)
           if [ -n "$RTTOPO_HDR" ]; then RTTOPO_INC="-I$(dirname "$RTTOPO_HDR")"; else RTTOPO_INC=""; fi
           
-          SILENCE_WARNINGS="-DICONV_CONST=const -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-error -Wno-macro-redefined -fpermissive"
-          SILENCE_CXX_WARNINGS="-DICONV_CONST=const -std=gnu++11 -Wno-error -Wno-deprecated-declarations -fpermissive"
+          # TUTAJ DODAŁEM -DVA_COPY=va_copy ABY x86 NIE UŻYWAŁO ZEPSUTEGO PRZYPISANIA =
+          SILENCE_WARNINGS="-DVA_COPY=va_copy -DICONV_CONST=const -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-error -Wno-macro-redefined -fpermissive"
+          SILENCE_CXX_WARNINGS="-DVA_COPY=va_copy -DICONV_CONST=const -std=gnu++11 -Wno-error -Wno-deprecated-declarations -fpermissive"
 
           echo "APP_CFLAGS += -include stddef.h -include stdarg.h -include fcntl.h -I$SQLITE_DIR -I$SPATIALITE_5_DIR/src/headers -I$SPATIALITE_5_DIR" >> "$JNI_DIR/Application.mk"
           echo "APP_CFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ6_DIR/include -I$PROJ6_DIR/src -I$ICONV_INC -I$ICONV_LIB -I$JSON_DIR $RTTOPO_INC" >> "$JNI_DIR/Application.mk"
