@@ -41,6 +41,10 @@ jobs:
           # DOSŁOWNE USUNIĘCIE MODUŁU LZMA
           find . -type f -name "Android.mk" | grep "/xz-" | xargs rm -f
 
+          # WYMUSZENIE UŻYCIA PROJ 4 ZAMIAST PROJ 6 (ABY NIE WYMAGAŁO PROJ.DB)
+          # Najpierw usuwamy fizycznie folder PROJ 6, żeby kompilator o nim nie wiedział
+          rm -rf $(find . -type d -name 'proj-6.1.1')
+
           # ----- BEZPIECZNE MODYFIKOWANIE PLIKÓW W PYTHONIE -----
           python3 << 'EOF'
           import os, re
@@ -53,6 +57,9 @@ jobs:
                   lines = f.readlines()
               with open(mk_path, 'w') as f:
                   for line in lines:
+                      # Zamiana PROJ 6 na stare i stabilne PROJ 4
+                      line = line.replace('proj-6.1.1', 'proj-4.9.1')
+                      
                       if 'include ' in line and any(x in line for x in ['rasterlite2', 'freetype', 'tiff', 'gif', 'png', 'jpeg', 'webp', 'xz-', 'lzma']):
                           continue
                       if 'LOCAL_STATIC_LIBRARIES' in line or 'LOCAL_SHARED_LIBRARIES' in line:
@@ -149,18 +156,11 @@ jobs:
           with open('$PRIV_HEADER', 'w') as f: f.write(content)
           "
 
-          # ----- NAPRAWA BŁĘDU PROJ -----
-          PROJ6_DIR=$(find $(pwd) -type d -name 'proj-6.1.1' | sort -V | tail -n 1)
-          PROJ4_DIR=$(find $(pwd) -type d -name 'proj-4.9.1' | sort -V | tail -n 1)
-
-          cp "$PROJ6_DIR/src/proj.h" "$PROJ6_DIR/include/proj.h" 2>/dev/null || true
-          cp "$PROJ4_DIR/src/proj_api.h" "$PROJ6_DIR/include/proj_api.h" 2>/dev/null || true
-
           JSON_DIR=$(find $(pwd) -type d -name 'json-c-*' | sort -V | tail -n 1)
           echo "#include <stddef.h>" > "$JSON_DIR/config.h" 
           echo "#include <fcntl.h>" >> "$JSON_DIR/config.h"
 
-          # ----- RĘCZNE I BEZPIECZNE ŁADOWANIE ŚCIEŻEK (ZAWSZE NAJNOWSZE WERSJE) -----
+          # ----- RĘCZNE I BEZPIECZNE ŁADOWANIE ŚCIEŻEK -----
           SQLITE_DIR=$(find $(pwd) -type d -name 'sqlite-amalgamation-*' | sort -V | tail -n 1)
           
           LIBXML_DIR=$(find $(pwd) -type d -name 'libxml2-*' | sort -V | tail -n 1)
@@ -174,19 +174,21 @@ jobs:
           ICONV_INC="$ICONV_DIR/include"
           ICONV_LIB="$ICONV_DIR/libcharset/include"
           
+          # Podpinamy PROJ 4 do środowiska
+          PROJ4_DIR=$(find $(pwd) -type d -name 'proj-4.9.1' | sort -V | tail -n 1)
+          
           RTTOPO_HDR=$(find $(pwd) -name "librttopo.h" | head -n 1)
           if [ -n "$RTTOPO_HDR" ]; then RTTOPO_INC="-I$(dirname "$RTTOPO_HDR")"; else RTTOPO_INC=""; fi
           
-          # TUTAJ DODAŁEM -DVA_COPY=va_copy ABY x86 NIE UŻYWAŁO ZEPSUTEGO PRZYPISANIA =
           SILENCE_WARNINGS="-DVA_COPY=va_copy -DICONV_CONST=const -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-error -Wno-macro-redefined -fpermissive"
           SILENCE_CXX_WARNINGS="-DVA_COPY=va_copy -DICONV_CONST=const -std=gnu++11 -Wno-error -Wno-deprecated-declarations -fpermissive"
 
           echo "APP_CFLAGS += -include stddef.h -include stdarg.h -include fcntl.h -I$SQLITE_DIR -I$SPATIALITE_5_DIR/src/headers -I$SPATIALITE_5_DIR" >> "$JNI_DIR/Application.mk"
-          echo "APP_CFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ6_DIR/include -I$PROJ6_DIR/src -I$ICONV_INC -I$ICONV_LIB -I$JSON_DIR $RTTOPO_INC" >> "$JNI_DIR/Application.mk"
+          echo "APP_CFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ4_DIR/src -I$ICONV_INC -I$ICONV_LIB -I$JSON_DIR $RTTOPO_INC" >> "$JNI_DIR/Application.mk"
           echo "APP_CFLAGS += $SILENCE_WARNINGS" >> "$JNI_DIR/Application.mk"
           
           echo "APP_CXXFLAGS += -I$SQLITE_DIR -I$SPATIALITE_5_DIR/src/headers -I$SPATIALITE_5_DIR" >> "$JNI_DIR/Application.mk"
-          echo "APP_CXXFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ6_DIR/include -I$PROJ6_DIR/src -I$ICONV_INC -I$ICONV_LIB -I$JSON_DIR $RTTOPO_INC" >> "$JNI_DIR/Application.mk"
+          echo "APP_CXXFLAGS += -I$LIBXML_INC -I$GEOS_INC -I$GEOS_MAIN_INC -I$PROJ4_DIR/src -I$ICONV_INC -I$ICONV_LIB -I$JSON_DIR $RTTOPO_INC" >> "$JNI_DIR/Application.mk"
           echo "APP_CXXFLAGS += $SILENCE_CXX_WARNINGS" >> "$JNI_DIR/Application.mk"
 
       - name: Przygotowanie Android NDK
