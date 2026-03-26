@@ -27,11 +27,9 @@ jobs:
 
           chmod -R 777 .
 
-          # ----- USUWANIE PRZESTARZAŁEGO LINKERA GOLD ORAZ FLAGI PROJ_NEW -----
+          # ----- USUWANIE PRZESTARZAŁEGO LINKERA GOLD -----
           find . -name "*.mk" -type f -exec sed -i 's/-fuse-ld=gold//g' {} +
           find . -name "*.mk" -type f -exec sed -i 's/-fuse-ld=bfd//g' {} +
-          find . -name "*.mk" -type f -exec sed -i 's/-DPROJ_NEW=1//g' {} +
-          find . -name "*.mk" -type f -exec sed -i 's/-DPROJ_NEW//g' {} +
 
           # ----- CHIRURGICZNE CIĘCIE KODU C DLA RASTERLITE -----
           sed -i '/#include.*rasterlite2/d' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
@@ -70,12 +68,11 @@ jobs:
           with open(os.path.join(jni_dir, 'proj-4.9.1.mk'), 'w', encoding='utf-8') as f:
               f.write(mk_content)
 
-          # 2. Głębokie czyszczenie WSZYSTKICH plików .mk (np. libspatialite.mk)
+          # 2. Głębokie czyszczenie Android.mk (wczytujemy jako jeden ciąg znaków)
           for root, dirs, files in os.walk(jni_dir):
               for file in files:
                   if file.endswith('.mk'):
                       p = os.path.join(root, file)
-                      # encoding='utf-8', errors='ignore' CHRONI PRZED CRASHEM NA NIETYPOWYCH ZNAKACH
                       with open(p, 'r', encoding='utf-8', errors='ignore') as f: txt = f.read()
                       
                       txt = txt.replace('proj-6.1.1', 'proj-4.9.1')
@@ -97,6 +94,21 @@ jobs:
               for file in files:
                   p = os.path.join(root, file)
                   
+                  # ZWIĘKSZENIE LIMITU POŁĄCZEŃ SPATIALITE Z 64 NA 4096!
+                  if file == 'alloc_cache.c':
+                      with open(p, 'r', encoding='utf-8', errors='ignore') as f: txt = f.read()
+                      txt = re.sub(r'#define MAX_CONNECTIONS\s+64', '#define MAX_CONNECTIONS 4096', txt)
+                      if 'static char* dummy_ptr;' not in txt:
+                          txt = 'static char* dummy_ptr = 0; static int dummy_int = 0;\n' + txt
+                      txt = txt.replace('cache->gaia_geos_error_msg', 'dummy_ptr')
+                      txt = txt.replace('cache->gaia_geos_warning_msg', 'dummy_ptr')
+                      txt = txt.replace('cache->gaia_rttopo_error_msg', 'dummy_ptr')
+                      txt = txt.replace('cache->gaia_rttopo_warning_msg', 'dummy_ptr')
+                      txt = txt.replace('cache->silent_mode', 'dummy_int')
+                      txt = txt.replace('free (dummy_ptr);', '')
+                      txt = txt.replace('strcpy (dummy_ptr, msg);', '')
+                      with open(p, 'w', encoding='utf-8') as f: f.write(txt)
+
                   if 'topology' in root and file.endswith('.c'):
                       with open(p, 'r', encoding='utf-8', errors='ignore') as f: txt = f.read()
                       if '<lwn_network.h>' in txt:
