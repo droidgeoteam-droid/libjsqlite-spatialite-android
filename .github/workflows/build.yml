@@ -42,26 +42,33 @@ jobs:
           rm -rf $(find . -type d -name 'proj-6.1.1')
           find . -type f -name "Android.mk" | grep "/xz-" | xargs rm -f
 
-          # ----- DYNAMICZNE GENEROWANIE BRAKUJĄCEGO MAKEFILE DLA PROJ 4 -----
-          cd $JNI_DIR
-          PROJ4_FILES=$(find proj-4.9.1/src -maxdepth 1 -name "*.c" ! -name "cs2cs.c" ! -name "geod.c" ! -name "nad2bin.c" ! -name "proj.c" | sort | tr '\n' ' ')
-          cat <<EOF > proj-4.9.1.mk
-          LOCAL_PATH := \$(call my-dir)
-          include \$(CLEAR_VARS)
-          LOCAL_MODULE := proj
-          LOCAL_C_INCLUDES := \$(LOCAL_PATH)/proj-4.9.1/src
-          LOCAL_SRC_FILES := $PROJ4_FILES
-          LOCAL_CFLAGS := -O2 -DHAVE_CONFIG_H -DMUTEX_pthread
-          include \$(BUILD_STATIC_LIBRARY)
-          EOF
-          cd $PROJECT_DIR
-
           # ----- BEZPIECZNE MODYFIKOWANIE PLIKÓW W PYTHONIE -----
           python3 << 'EOF'
           import os, re
           jni_dir = os.environ['JNI_DIR']
           
-          # 1. Głębokie czyszczenie Android.mk (wczytujemy jako jeden ciąg znaków)
+          # 1. GENEROWANIE PLIKU MAKEFILE DLA PROJ 4
+          proj_src_dir = os.path.join(jni_dir, 'proj-4.9.1', 'src')
+          proj_files = []
+          if os.path.exists(proj_src_dir):
+              for f in os.listdir(proj_src_dir):
+                  if f.endswith('.c') and f not in ['cs2cs.c', 'geod.c', 'nad2bin.c', 'proj.c']:
+                      proj_files.append('proj-4.9.1/src/' + f)
+          
+          proj_files_str = ' \\\n    '.join(sorted(proj_files))
+          
+          mk_content = f"""LOCAL_PATH := $(call my-dir)
+          include $(CLEAR_VARS)
+          LOCAL_MODULE := proj
+          LOCAL_C_INCLUDES := $(LOCAL_PATH)/proj-4.9.1/src
+          LOCAL_SRC_FILES := {proj_files_str}
+          LOCAL_CFLAGS := -O2 -DHAVE_CONFIG_H -DMUTEX_pthread -DPROJ_LIB=\\"\\"
+          include $(BUILD_STATIC_LIBRARY)
+          """
+          with open(os.path.join(jni_dir, 'proj-4.9.1.mk'), 'w') as f:
+              f.write(mk_content)
+
+          # 2. Głębokie czyszczenie Android.mk (wczytujemy jako jeden ciąg znaków)
           mk_path = os.path.join(jni_dir, 'Android.mk')
           if os.path.exists(mk_path):
               with open(mk_path, 'r') as f: txt = f.read()
@@ -80,7 +87,7 @@ jobs:
                   
               with open(mk_path, 'w') as f: f.write(txt)
 
-          # 2. Naprawy kompatybilności pod Androida
+          # 3. Naprawy kompatybilności pod Androida
           for root, dirs, files in os.walk('.'):
               for file in files:
                   p = os.path.join(root, file)
