@@ -27,9 +27,11 @@ jobs:
 
           chmod -R 777 .
 
-          # ----- USUWANIE PRZESTARZAŁEGO LINKERA GOLD -----
+          # ----- USUWANIE PRZESTARZAŁEGO LINKERA GOLD ORAZ FLAGI PROJ_NEW -----
           find . -name "*.mk" -type f -exec sed -i 's/-fuse-ld=gold//g' {} +
           find . -name "*.mk" -type f -exec sed -i 's/-fuse-ld=bfd//g' {} +
+          find . -name "*.mk" -type f -exec sed -i 's/-DPROJ_NEW=1//g' {} +
+          find . -name "*.mk" -type f -exec sed -i 's/-DPROJ_NEW//g' {} +
 
           # ----- CHIRURGICZNE CIĘCIE KODU C DLA RASTERLITE -----
           sed -i '/#include.*rasterlite2/d' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
@@ -68,27 +70,26 @@ jobs:
           with open(os.path.join(jni_dir, 'proj-4.9.1.mk'), 'w') as f:
               f.write(mk_content)
 
-          # 2. Głębokie czyszczenie Android.mk (wczytujemy jako jeden ciąg znaków)
-          mk_path = os.path.join(jni_dir, 'Android.mk')
-          if os.path.exists(mk_path):
-              with open(mk_path, 'r') as f: txt = f.read()
-              
-              # Wymuszamy plik PROJ 4 zamiast PROJ 6 i usuwamy flagę PROJ_NEW
-              txt = txt.replace('proj-6.1.1', 'proj-4.9.1')
-              txt = txt.replace('-DPROJ_NEW=1', '')
-              txt = txt.replace('-DPROJ_NEW', '')
-              
-              # Usuwamy załączanie plików makefile dla wyciętych modułów
-              for lib in ['rasterlite2', 'freetype', 'tiff', 'gif', 'png', 'jpeg', 'webp', 'xz-', 'lzma']:
-                  txt = re.sub(r'^.*include .*' + lib + r'.*$\n', '', txt, flags=re.MULTILINE)
-              
-              # Usuwamy zależności z bloków LOCAL_STATIC_LIBRARIES
-              for lib in ['rasterlite2', 'librasterlite2', 'freetype', 'tiff', 'gif', 'png', 'jpeg', 'webp', 'lzma', 'liblzma', 'libpng', 'libjpeg', 'libtiff', 'libgif', 'libwebp']:
-                  txt = re.sub(r'(?<![\w-])' + lib + r'(?![\w-])', '', txt)
-                  
-              txt = re.sub(r'\$\(call import-module,xz-[^\)]*\)', '', txt)
-                  
-              with open(mk_path, 'w') as f: f.write(txt)
+          # 2. Głębokie czyszczenie WSZYSTKICH plików .mk (np. libspatialite.mk)
+          for root, dirs, files in os.walk(jni_dir):
+              for file in files:
+                  if file.endswith('.mk'):
+                      p = os.path.join(root, file)
+                      with open(p, 'r') as f: txt = f.read()
+                      
+                      txt = txt.replace('proj-6.1.1', 'proj-4.9.1')
+                      txt = txt.replace('-DPROJ_NEW=1', '')
+                      txt = txt.replace('-DPROJ_NEW', '')
+                      
+                      for lib in ['rasterlite2', 'freetype', 'tiff', 'gif', 'png', 'jpeg', 'webp', 'xz-', 'lzma']:
+                          txt = re.sub(r'^.*include .*' + lib + r'.*$\n', '', txt, flags=re.MULTILINE)
+                      
+                      for lib in ['rasterlite2', 'librasterlite2', 'freetype', 'tiff', 'gif', 'png', 'jpeg', 'webp', 'lzma', 'liblzma', 'libpng', 'libjpeg', 'libtiff', 'libgif', 'libwebp']:
+                          txt = re.sub(r'(?<![\w-])' + lib + r'(?![\w-])', '', txt)
+                          
+                      txt = re.sub(r'\$\(call import-module,xz-[^\)]*\)', '', txt)
+                          
+                      with open(p, 'w') as f: f.write(txt)
 
           # 3. Naprawy kompatybilności pod Androida
           for root, dirs, files in os.walk('.'):
@@ -151,7 +152,7 @@ jobs:
                       with open(p, 'w') as f: f.write(txt)
           EOF
           
-          # ----- TWORZYMY CZYSTY CONFIG.H -----
+          # ----- TWORZYMY CZYSTY CONFIG.H (Z WYLACZONYM PROJ_NEW) -----
           SPATIALITE_5_DIR=$(find $(pwd) -type d -name 'libspatialite-5.0.0' | head -n 1)
           cat <<EOF > "$SPATIALITE_5_DIR/config.h"
           #ifndef CONFIG_H
@@ -163,6 +164,7 @@ jobs:
           #define HAVE_STDINT_H 1
           #define HAVE_UNISTD_H 1
           #define OMIT_LZMA 1
+          #undef PROJ_NEW
           #endif
           EOF
           
@@ -198,7 +200,7 @@ jobs:
           RTTOPO_HDR=$(find $(pwd) -name "librttopo.h" | head -n 1)
           if [ -n "$RTTOPO_HDR" ]; then RTTOPO_INC="-I$(dirname "$RTTOPO_HDR")"; else RTTOPO_INC=""; fi
           
-          # Dopisujemy -UPROJ_NEW, aby brutalnie od-definiować makro narzucające PROJ 6
+          # Dodajemy flagę ACCEPT_USE_OF_DEPRECATED_PROJ_API_H aby Spatialite akceptował PROJ 4
           SILENCE_WARNINGS="-UPROJ_NEW -DVA_COPY=va_copy -DICONV_CONST=const -DACCEPT_USE_OF_DEPRECATED_PROJ_API_H=1 -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-error -Wno-macro-redefined -fpermissive"
           SILENCE_CXX_WARNINGS="-UPROJ_NEW -DVA_COPY=va_copy -DICONV_CONST=const -DACCEPT_USE_OF_DEPRECATED_PROJ_API_H=1 -std=gnu++11 -Wno-error -Wno-deprecated-declarations -fpermissive"
 
