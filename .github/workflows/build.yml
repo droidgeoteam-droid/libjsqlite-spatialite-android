@@ -67,7 +67,7 @@ jobs:
           mk_content += "LOCAL_CFLAGS := -O2 -DHAVE_CONFIG_H -DMUTEX_pthread\n"
           mk_content += "include $(BUILD_STATIC_LIBRARY)\n"
           
-          with open(os.path.join(jni_dir, 'proj-4.9.1.mk'), 'w') as f:
+          with open(os.path.join(jni_dir, 'proj-4.9.1.mk'), 'w', encoding='utf-8') as f:
               f.write(mk_content)
 
           # 2. Głębokie czyszczenie WSZYSTKICH plików .mk (np. libspatialite.mk)
@@ -75,7 +75,8 @@ jobs:
               for file in files:
                   if file.endswith('.mk'):
                       p = os.path.join(root, file)
-                      with open(p, 'r') as f: txt = f.read()
+                      # encoding='utf-8', errors='ignore' CHRONI PRZED CRASHEM NA NIETYPOWYCH ZNAKACH
+                      with open(p, 'r', encoding='utf-8', errors='ignore') as f: txt = f.read()
                       
                       txt = txt.replace('proj-6.1.1', 'proj-4.9.1')
                       txt = txt.replace('-DPROJ_NEW=1', '')
@@ -89,7 +90,7 @@ jobs:
                           
                       txt = re.sub(r'\$\(call import-module,xz-[^\)]*\)', '', txt)
                           
-                      with open(p, 'w') as f: f.write(txt)
+                      with open(p, 'w', encoding='utf-8') as f: f.write(txt)
 
           # 3. Naprawy kompatybilności pod Androida
           for root, dirs, files in os.walk('.'):
@@ -97,17 +98,17 @@ jobs:
                   p = os.path.join(root, file)
                   
                   if 'topology' in root and file.endswith('.c'):
-                      with open(p, 'r') as f: txt = f.read()
+                      with open(p, 'r', encoding='utf-8', errors='ignore') as f: txt = f.read()
                       if '<lwn_network.h>' in txt:
                           txt = txt.replace('<lwn_network.h>', '"lwn_network.h"')
-                          with open(p, 'w') as f: f.write(txt)
+                          with open(p, 'w', encoding='utf-8') as f: f.write(txt)
 
                   if file == 'wfs_in.c':
-                      with open(p, 'a') as f:
+                      with open(p, 'a', encoding='utf-8') as f:
                           f.write('\n#ifdef __cplusplus\nextern "C" {\n#endif\n__attribute__((weak)) void xmlNanoHTTPCleanup(void) {}\n#ifdef __cplusplus\n}\n#endif\n')
 
                   if file == 'xmlversion.h.in':
-                      with open(p, 'r') as f: txt = f.read()
+                      with open(p, 'r', encoding='utf-8', errors='ignore') as f: txt = f.read()
                       txt = txt.replace('@WITH_ZLIB@', '0')
                       txt = txt.replace('@WITH_LZMA@', '0')
                       txt = txt.replace('@WITH_ICU@', '0')
@@ -129,27 +130,27 @@ jobs:
                       txt += '\n'
                       
                       target = os.path.join(root, 'xmlversion.h')
-                      with open(target, 'w') as f: f.write(txt)
+                      with open(target, 'w', encoding='utf-8') as f: f.write(txt)
 
                   if file == 'version.c' and 'versioninfo' in root:
-                      with open(p, 'r') as f: txt = f.read()
+                      with open(p, 'r', encoding='utf-8', errors='ignore') as f: txt = f.read()
                       txt = txt.replace('VERSION', '"5.0.0"')
-                      with open(p, 'w') as f: f.write(txt)
+                      with open(p, 'w', encoding='utf-8') as f: f.write(txt)
 
                   if file == 'json_config.h.win32':
-                      with open(p, 'r') as f: txt = f.read()
+                      with open(p, 'r', encoding='utf-8', errors='ignore') as f: txt = f.read()
                       txt = re.sub(r'#define HAVE_DECL_ISINF 1', '', txt)
                       txt = re.sub(r'#define HAVE_DECL_ISNAN 1', '', txt)
                       txt += '\n#define HAVE_STRDUP 1\n#define HAVE_SNPRINTF 1\n#define HAVE_VSNPRINTF 1\n#define HAVE_VASPRINTF 1\n#define HAVE_STRNCASECMP 1\n#define HAVE_STDARG_H 1\n#define HAVE_VA_COPY 1\n#define HAVE_VPRINTF 1\n'
                       target = os.path.join(root, 'json_config.h')
-                      with open(target, 'w') as f: f.write(txt)
+                      with open(target, 'w', encoding='utf-8') as f: f.write(txt)
                       
                   if file == 'printbuf.c':
-                      with open(p, 'r') as f: txt = f.read()
+                      with open(p, 'r', encoding='utf-8', errors='ignore') as f: txt = f.read()
                       txt = txt.replace('# error Not enough var arg support!', '// zneutralizowane')
                       txt = txt.replace('#include "vasprintf_compat.h"', '// zneutralizowane vasprintf_compat')
                       txt = txt.replace('#include "snprintf_compat.h"', '// zneutralizowane snprintf_compat')
-                      with open(p, 'w') as f: f.write(txt)
+                      with open(p, 'w', encoding='utf-8') as f: f.write(txt)
           EOF
           
           # ----- TWORZYMY CZYSTY CONFIG.H (Z WYLACZONYM PROJ_NEW) -----
@@ -171,9 +172,9 @@ jobs:
           # ----- WSTRZYKNIĘCIE ZMIENNYCH DO STRUKTURY -----
           PRIV_HEADER=$(find "$SPATIALITE_5_DIR" -name "spatialite_private.h" | head -n 1)
           python3 -c "
-          with open('$PRIV_HEADER', 'r') as f: content = f.read()
+          with open('$PRIV_HEADER', 'r', encoding='utf-8', errors='ignore') as f: content = f.read()
           content = content.replace('void *auth_context;', 'void *auth_context;\n    char* gaia_geos_error_msg;\n    char* gaia_geos_warning_msg;\n    char* gaia_rttopo_error_msg;\n    char* gaia_rttopo_warning_msg;\n    int silent_mode;')
-          with open('$PRIV_HEADER', 'w') as f: f.write(content)
+          with open('$PRIV_HEADER', 'w', encoding='utf-8') as f: f.write(content)
           "
 
           JSON_DIR=$(find $(pwd) -type d -name 'json-c-*' | sort -V | tail -n 1)
