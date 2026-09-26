@@ -229,11 +229,14 @@ jobs:
           ICONV_INC="$ICONV_DIR/include"
           ICONV_LIB="$ICONV_DIR/libcharset/include"
           
-          # Podpinamy PROJ 4 do środowiska
           PROJ4_DIR=$(find $(pwd) -type d -name 'proj-4.9.1' | sort -V | tail -n 1)
           
-          RTTOPO_HDR=$(find $(pwd) -name "librttopo.h" | head -n 1)
-          if [ -n "$RTTOPO_HDR" ]; then RTTOPO_INC="-I$(dirname "$RTTOPO_HDR")"; else RTTOPO_INC=""; fi
+          # Inteligentne, podwójne ładowanie nagłówków RTTOPO (zarówno z src jak i headers ze wszystkich wersji)
+          RTTOPO_INC=""
+          for d in $(find $(pwd) -type d -name 'librttopo-*'); do
+              if [ -d "$d/headers" ]; then RTTOPO_INC="$RTTOPO_INC -I$d/headers"; fi
+              if [ -d "$d/src" ]; then RTTOPO_INC="$RTTOPO_INC -I$d/src"; fi
+          done
           
           # Dodajemy flagę ACCEPT_USE_OF_DEPRECATED_PROJ_API_H aby Spatialite akceptował PROJ 4
           SILENCE_WARNINGS="-UPROJ_NEW -DVA_COPY=va_copy -DICONV_CONST=const -DACCEPT_USE_OF_DEPRECATED_PROJ_API_H=1 -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-error -Wno-macro-redefined -fpermissive"
