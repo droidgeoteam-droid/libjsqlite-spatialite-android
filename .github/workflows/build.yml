@@ -27,16 +27,11 @@ jobs:
 
           chmod -R 777 .
 
-          # ----- USUWANIE PRZESTARZAŁEGO LINKERA GOLD -----
+          # ----- USUWANIE PRZESTARZAŁEGO LINKERA GOLD ORAZ FLAGI PROJ_NEW -----
           find . -name "*.mk" -type f -exec sed -i 's/-fuse-ld=gold//g' {} +
           find . -name "*.mk" -type f -exec sed -i 's/-fuse-ld=bfd//g' {} +
-
-          # ----- CHIRURGICZNE CIĘCIE KODU C DLA RASTERLITE -----
-          sed -i '/#include.*rasterlite2/d' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
-          sed -i 's/void \*p_rl2_data = (void \*)rl2_alloc_private();/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
-          sed -i 's/rl2_init((sqlite3 \*)h->sqlite,p_rl2_data,0);/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
-          sed -i 's/rl2_init((sqlite3 \*)h->sqlite,0);/\/\//g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
-          sed -i 's/(const char \*)rl2_version();/"wyciety_rasterlite";/g' "$JNI_DIR/javasqlite-20120209/native/sqlite_jni.c"
+          find . -name "*.mk" -type f -exec sed -i 's/-DPROJ_NEW=1//g' {} +
+          find . -name "*.mk" -type f -exec sed -i 's/-DPROJ_NEW//g' {} +
 
           # DOSŁOWNE USUNIĘCIE PROJ 6 ORAZ LZMA
           rm -rf $(find . -type d -name 'proj-6.1.1')
@@ -89,7 +84,34 @@ jobs:
                           
                       with open(p, 'w', encoding='utf-8') as f: f.write(txt)
 
-          # 3. Naprawy kompatybilności pod Androida
+          # 3. WSTRZYKNIĘCIE FAŁSZYWEJ FUNKCJI SQL DLA RASTERLITE (ABY B4A NIE ZWRACAŁO BŁĘDU)
+          jni_sqlite = os.path.join(jni_dir, 'javasqlite-20120209', 'native', 'sqlite_jni.c')
+          if os.path.exists(jni_sqlite):
+              with open(jni_sqlite, 'r', encoding='utf-8', errors='ignore') as f:
+                  txt = f.read()
+              
+              injection = """
+          #include <sqlite3.h>
+          static void dummy_rl2_version_func(sqlite3_context *context, int argc, sqlite3_value **argv) {
+              sqlite3_result_text(context, "wyciety_rasterlite", -1, 0);
+          }
+          void dummy_rl2_init_injector(sqlite3 *db) {
+              sqlite3_create_function(db, "RL2_Version", 0, 1, 0, dummy_rl2_version_func, 0, 0);
+          }
+          """
+              if 'dummy_rl2_init_injector' not in txt:
+                  txt = injection + txt
+                  
+              txt = re.sub(r'#include\s*<rasterlite2/rasterlite2\.h>', '', txt)
+              txt = txt.replace('void *p_rl2_data = (void *)rl2_alloc_private();', '// zablokowane p_rl2')
+              txt = txt.replace('rl2_init((sqlite3 *)h->sqlite,p_rl2_data,0);', 'dummy_rl2_init_injector((sqlite3 *)h->sqlite);')
+              txt = txt.replace('rl2_init((sqlite3 *)h->sqlite,0);', 'dummy_rl2_init_injector((sqlite3 *)h->sqlite);')
+              txt = txt.replace('(const char *)rl2_version()', '"wyciety_rasterlite"')
+              
+              with open(jni_sqlite, 'w', encoding='utf-8') as f:
+                  f.write(txt)
+
+          # 4. Naprawy kompatybilności pod Androida
           for root, dirs, files in os.walk('.'):
               for file in files:
                   p = os.path.join(root, file)
@@ -193,7 +215,7 @@ jobs:
           echo "#include <stddef.h>" > "$JSON_DIR/config.h" 
           echo "#include <fcntl.h>" >> "$JSON_DIR/config.h"
 
-          # ----- RĘCZNE I BEZPIECZNE ŁADOWANIE ŚCIEŻEK (ZAWSZE NAJNOWSZE WERSJE) -----
+          # ----- RĘCZNE I BEZPIECZNE ŁADOWANIE ŚCIEŻEK -----
           SQLITE_DIR=$(find $(pwd) -type d -name 'sqlite-amalgamation-*' | sort -V | tail -n 1)
           
           LIBXML_DIR=$(find $(pwd) -type d -name 'libxml2-*' | sort -V | tail -n 1)
