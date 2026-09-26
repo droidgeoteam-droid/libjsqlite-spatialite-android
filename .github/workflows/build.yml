@@ -231,12 +231,9 @@ jobs:
           
           PROJ4_DIR=$(find $(pwd) -type d -name 'proj-4.9.1' | sort -V | tail -n 1)
           
-          # Inteligentne, podwójne ładowanie nagłówków RTTOPO (zarówno z src jak i headers ze wszystkich wersji)
-          RTTOPO_INC=""
-          for d in $(find $(pwd) -type d -name 'librttopo-*'); do
-              if [ -d "$d/headers" ]; then RTTOPO_INC="$RTTOPO_INC -I$d/headers"; fi
-              if [ -d "$d/src" ]; then RTTOPO_INC="$RTTOPO_INC -I$d/src"; fi
-          done
+          # BEZPIECZNE ŁADOWANIE TYLKO NAJNOWSZEJ WERSJI RTTOPO
+          RTTOPO_DIR=$(find $(pwd) -type d -name 'librttopo-*' | sort -V | tail -n 1)
+          RTTOPO_INC="-I$RTTOPO_DIR/headers -I$RTTOPO_DIR/src"
           
           # Dodajemy flagę ACCEPT_USE_OF_DEPRECATED_PROJ_API_H aby Spatialite akceptował PROJ 4
           SILENCE_WARNINGS="-UPROJ_NEW -DVA_COPY=va_copy -DICONV_CONST=const -DACCEPT_USE_OF_DEPRECATED_PROJ_API_H=1 -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-error -Wno-macro-redefined -fpermissive"
