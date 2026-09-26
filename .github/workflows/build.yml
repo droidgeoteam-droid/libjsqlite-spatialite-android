@@ -187,7 +187,7 @@ jobs:
                       with open(p, 'w', encoding='utf-8') as f: f.write(txt)
           EOF
           
-          # ----- TWORZYMY CZYSTY CONFIG.H -----
+          # ----- TWORZYMY CZYSTY CONFIG.H (Z WYLACZONYM PROJ_NEW) -----
           SPATIALITE_5_DIR=$(find $(pwd) -type d -name 'libspatialite-5.0.0' | head -n 1)
           cat <<EOF > "$SPATIALITE_5_DIR/config.h"
           #ifndef CONFIG_H
@@ -229,19 +229,11 @@ jobs:
           ICONV_INC="$ICONV_DIR/include"
           ICONV_LIB="$ICONV_DIR/libcharset/include"
           
-          # GENEROWANIE BRAKUJĄCEGO LIBRTOPO_GEOM.H
-          RTTOPO_DIR=$(find $(pwd) -type d -name 'librttopo-*' | sort -V | tail -n 1)
-          RTTOPO_HDR="$RTTOPO_DIR/headers"
-          cat <<EOF > "$RTTOPO_HDR/librttopo_geom.h"
-          #ifndef LIBRTTOPO_GEOM_H
-          #define LIBRTTOPO_GEOM_H
-          /* Generowane obejscie pod NDK dla RTTOPO */
-          #endif
-          EOF
-          RTTOPO_INC="-I$RTTOPO_HDR"
-          
           # Podpinamy PROJ 4 do środowiska
           PROJ4_DIR=$(find $(pwd) -type d -name 'proj-4.9.1' | sort -V | tail -n 1)
+          
+          RTTOPO_HDR=$(find $(pwd) -name "librttopo.h" | head -n 1)
+          if [ -n "$RTTOPO_HDR" ]; then RTTOPO_INC="-I$(dirname "$RTTOPO_HDR")"; else RTTOPO_INC=""; fi
           
           # Dodajemy flagę ACCEPT_USE_OF_DEPRECATED_PROJ_API_H aby Spatialite akceptował PROJ 4
           SILENCE_WARNINGS="-UPROJ_NEW -DVA_COPY=va_copy -DICONV_CONST=const -DACCEPT_USE_OF_DEPRECATED_PROJ_API_H=1 -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-error -Wno-macro-redefined -fpermissive"
